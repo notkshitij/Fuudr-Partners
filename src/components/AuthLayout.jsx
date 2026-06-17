@@ -1,49 +1,80 @@
 import React from 'react';
-import { ChefHat } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { ChefHat, ArrowRight } from 'lucide-react';
 
 const AuthLayout = ({ children, title, subtitle }) => {
+  const location = useLocation();
+  const isSignIn = location.pathname === '/signin';
+
   return (
-    <div className="min-h-screen flex bg-slate-50 font-outfit text-slate-900">
+    <div className="h-screen w-full bg-[#FAFAFA] font-outfit text-slate-800 flex overflow-hidden">
       
-      {/* Left Pane - Image with padding and rounded corners */}
-      <div className="hidden lg:flex flex-1 relative flex-col justify-center items-center p-6">
-        <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden shadow-2xl">
-          {/* New Image - Dark mood, pizza/burger/hidden gems vibe */}
-          <img 
-            src="https://images.unsplash.com/photo-1513104890138-7c749659a591?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80" 
-            alt="Delicious Pizza and Burgers" 
-            className="absolute inset-0 w-full h-full object-cover scale-105 transition-transform duration-[20000ms] hover:scale-110"
-          />
-          
-          {/* Dark gradient overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20"></div>
-          
-          {/* Huge stylized Fuudr text */}
-          <div className="absolute inset-0 flex flex-col justify-center items-center text-center p-8">
-            <div className="flex items-center gap-4 mb-2">
-              <ChefHat className="text-orange-500 w-24 h-24 lg:w-32 lg:h-32 drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]" />
-              <h1 className="text-[6rem] lg:text-[8rem] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-500 drop-shadow-lg">
-                Fuudr
-              </h1>
-            </div>
-            <p className="text-orange-100 text-2xl lg:text-3xl font-medium tracking-[0.3em] uppercase bg-black/30 px-6 py-2 rounded-full backdrop-blur-sm border border-white/10">
-              Partner Portal
+      {/* 
+        ========================================
+        LEFT PANE - Cinematic Static Image
+        ========================================
+      */}
+      <div className="hidden lg:flex flex-col relative w-[40%] h-[calc(100vh-2rem)] my-4 ml-4 rounded-[2.5rem] overflow-hidden shadow-2xl z-10">
+        <img 
+          src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80" 
+          alt="Delicious Food" 
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10"></div>
+        
+        <div className="relative z-10 flex flex-col justify-between h-full p-12">
+          <div className="flex items-center gap-3 text-white">
+            <img src="/icon.png" alt="Fuudr" className="w-10 h-10 object-contain drop-shadow-md" />
+            <span className="text-2xl font-black tracking-tight">Fuudr</span>
+          </div>
+
+          <div className="mb-10">
+            <h1 className="text-5xl font-black text-white leading-[1.1] tracking-tight mb-4">
+              Partner with the fastest growing delivery network.
+            </h1>
+            <p className="text-white/80 text-lg font-medium">
+              Join thousands of restaurants scaling their revenue daily.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Right Pane - Form */}
-      <div className="flex-1 flex flex-col justify-center p-8 max-w-2xl mx-auto w-full">
-        <div className="bg-white p-10 rounded-3xl shadow-xl w-full animate-slideUp border border-slate-100">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold mb-2 text-slate-900">{title}</h1>
-            <p className="text-slate-500">{subtitle}</p>
+      {/* 
+        ========================================
+        RIGHT PANE - Scrolling pane, fixed card height
+        ========================================
+      */}
+      <div className="w-full lg:w-[60%] h-full flex flex-col relative bg-white overflow-y-auto overflow-x-hidden scrollbar-none">
+        
+        {/* Centered Area */}
+        <div className="flex-1 flex justify-center items-center p-6 lg:p-10 w-full min-h-max bg-[#FAFAFA]">
+          
+          {/* Card (No internal scrollbar) */}
+          <div className="w-full max-w-xl bg-white p-8 lg:p-10 rounded-3xl shadow-xl border border-slate-100 m-auto">
+            
+            <div className="mb-8 text-center">
+              <h2 className="text-3xl font-black mb-2 text-slate-900">{title}</h2>
+              <p className="text-slate-500 font-medium">{subtitle}</p>
+            </div>
+            
+            {/* The child form injected here */}
+            {children}
+            
           </div>
-          {children}
         </div>
+
       </div>
 
+      {/* Global style to completely hide the scrollbar while keeping scroll functionality */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .scrollbar-none::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-none {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}} />
     </div>
   );
 };

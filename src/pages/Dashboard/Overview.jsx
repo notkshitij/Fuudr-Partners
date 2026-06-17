@@ -1,37 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  TrendingUp, 
   UtensilsCrossed, 
-  Video, 
-  Star 
+  Star,
+  Plus,
+  ArrowRight,
 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+import { Link } from 'react-router-dom';
 
 const Overview = ({ user }) => {
   const [stats, setStats] = useState({
     menuItems: 0,
-    reels: 0
+    avgRating: null,
+    totalReviews: 0
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Fetch menu count
         const { count: menuCount } = await supabase
           .from('menu_items')
           .select('*', { count: 'exact', head: true })
           .eq('partner_id', user.id);
 
-        // Fetch reels count
-        const { count: reelsCount } = await supabase
-          .from('reels')
-          .select('*', { count: 'exact', head: true })
-          .eq('partner_id', user.id);
+        const { data: partnerData } = await supabase
+          .from('partners')
+          .select('avg_rating, total_reviews')
+          .eq('id', user.id)
+          .single();
 
         setStats({
           menuItems: menuCount || 0,
-          reels: reelsCount || 0
+          avgRating: partnerData?.avg_rating || null,
+          totalReviews: partnerData?.total_reviews || 0
         });
       } catch (err) {
         console.error("Error fetching stats:", err);
@@ -44,49 +46,106 @@ const Overview = ({ user }) => {
   }, [user.id]);
 
   const statCards = [
-    { title: 'Total Menu Items', value: stats.menuItems, icon: UtensilsCrossed, color: 'text-orange-500', bg: 'bg-orange-100' },
-    { title: 'Reels Uploaded', value: stats.reels, icon: Video, color: 'text-blue-500', bg: 'bg-blue-100' },
-    { title: 'Profile Rating', value: 'New', icon: Star, color: 'text-yellow-500', bg: 'bg-yellow-100' },
-    { title: 'Profile Views', value: '0', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-100' },
+    { 
+      title: 'Total Menu Items', 
+      value: stats.menuItems, 
+      icon: UtensilsCrossed, 
+      color: 'text-orange-600', 
+      bg: 'bg-orange-50' 
+    },
+    { 
+      title: 'Profile Rating', 
+      value: stats.avgRating ? `${stats.avgRating} ★` : 'New', 
+      icon: Star, 
+      color: 'text-yellow-600', 
+      bg: 'bg-yellow-50' 
+    },
+    { 
+      title: 'Total Reviews', 
+      value: stats.totalReviews, 
+      icon: Star, 
+      color: 'text-purple-600', 
+      bg: 'bg-purple-50' 
+    },
   ];
 
   return (
-    <div className="animate-fadeIn">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">Welcome to your Dashboard!</h1>
-        <p className="text-slate-500 text-lg">Here's a quick overview of how {user.restaurant_name} is doing.</p>
+    <div className="animate-fadeIn max-w-6xl mx-auto pb-12">
+      
+      {/* Header */}
+      <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-slate-200 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">
+            Welcome back, {user.owner_name}
+          </h1>
+          <p className="text-slate-500 font-medium">
+            Here's your {user.restaurant_name} overview for today.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Link 
+            to="/dashboard/menu" 
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center gap-2 shadow-sm shadow-orange-500/20"
+          >
+            <Plus size={16} /> Add Dish
+          </Link>
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        <div className="flex justify-center items-center h-40">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-orange-500"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {statCards.map((stat, index) => (
-            <div key={index} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md transition-shadow">
-              <div className={`w-14 h-14 rounded-2xl ${stat.bg} flex items-center justify-center`}>
-                <stat.icon className={stat.color} size={28} />
-              </div>
+            <div key={index} className="bg-white p-6 rounded-2xl border border-slate-200 flex items-start justify-between shadow-sm">
               <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">{stat.title}</p>
-                <h3 className="text-3xl font-bold text-slate-900">{stat.value}</h3>
+                <p className="text-sm font-semibold text-slate-500 mb-1">{stat.title}</p>
+                <h3 className="text-3xl font-bold text-slate-900 tracking-tight">{stat.value}</h3>
+              </div>
+              <div className={`w-12 h-12 rounded-xl ${stat.bg} flex items-center justify-center`}>
+                <stat.icon className={stat.color} size={24} />
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Placeholder for future charts or recent activity */}
-      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 min-h-[300px] flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-          <TrendingUp className="text-slate-300" size={32} />
+      {/* Quick Links */}
+      <div>
+        <h2 className="text-xl font-bold text-slate-900 mb-6">Quick Links</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <Link to="/dashboard/menu" className="group bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between hover:border-orange-500 hover:shadow-md hover:shadow-orange-500/5 transition-all">
+            <div className="flex items-center gap-5">
+              <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                <UtensilsCrossed size={24} className="text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Manage Menu</h3>
+                <p className="text-slate-500 text-sm font-medium">Add or remove dishes from your menu</p>
+              </div>
+            </div>
+            <ArrowRight className="text-slate-400 group-hover:text-orange-500 transition-colors" size={20} />
+          </Link>
+
+          <Link to="/dashboard/settings" className="group bg-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between hover:border-purple-500 hover:shadow-md hover:shadow-purple-500/5 transition-all">
+            <div className="flex items-center gap-5">
+              <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
+                <Star size={24} className="text-purple-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-1">Ratings & Reviews</h3>
+                <p className="text-slate-500 text-sm font-medium">See what customers say about you</p>
+              </div>
+            </div>
+            <ArrowRight className="text-slate-400 group-hover:text-purple-500 transition-colors" size={20} />
+          </Link>
+
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">Analytics coming soon</h3>
-        <p className="text-slate-500 max-w-md">
-          Once your restaurant goes live and customers start interacting with your menu and reels, you'll see detailed analytics here.
-        </p>
       </div>
+
     </div>
   );
 };

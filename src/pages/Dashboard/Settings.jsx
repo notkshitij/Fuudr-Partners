@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Building2, Clock, FileText, Image as ImageIcon, Upload, ShieldCheck, MapPin, Mail, Phone, User, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 const Settings = ({ user }) => {
   const [loading, setLoading] = useState(false);
@@ -79,20 +80,13 @@ const Settings = ({ user }) => {
   };
 
   const uploadFile = async (file, bucket) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}_${bucket}_${Math.random()}.${fileExt}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('partner_documents')
-      .upload(fileName, file, { upsert: true });
-
-    if (uploadError) throw uploadError;
-
-    const { data: publicUrlData } = supabase.storage
-      .from('partner_documents')
-      .getPublicUrl(fileName);
-      
-    return publicUrlData.publicUrl;
+    try {
+      const url = await uploadToCloudinary(file, 'auto');
+      return url;
+    } catch (err) {
+      console.error(`Upload failed for ${bucket}:`, err);
+      throw new Error(`Failed to upload to Cloudinary. Check your API keys.`);
+    }
   };
 
   const handleSubmit = async (e) => {

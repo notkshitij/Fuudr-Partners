@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Video, Play, X, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 const ReelsManager = ({ user }) => {
   const [reels, setReels] = useState([]);
@@ -69,20 +70,7 @@ const ReelsManager = ({ user }) => {
 
     try {
       // 1. Upload Video
-      const fileExt = videoFile.name.split('.').pop();
-      const fileName = `${user.id}_reel_${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('reels')
-        .upload(fileName, videoFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('reels')
-        .getPublicUrl(fileName);
-      
-      const videoUrl = publicUrlData.publicUrl;
+      const videoUrl = await uploadToCloudinary(videoFile, 'video');
 
       // 2. Save Reel details
       const { error } = await supabase

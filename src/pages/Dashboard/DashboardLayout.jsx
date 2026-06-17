@@ -3,7 +3,6 @@ import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   UtensilsCrossed, 
-  Video, 
   LogOut,
   Menu as MenuIcon,
   X,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react';
 import Overview from './Overview';
 import MenuManager from './MenuManager';
-import ReelsManager from './ReelsManager';
 import Settings from './Settings';
 
 const DashboardLayout = () => {
@@ -39,7 +37,6 @@ const DashboardLayout = () => {
   const navItems = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Menu', path: '/dashboard/menu', icon: UtensilsCrossed },
-    { name: 'Reels', path: '/dashboard/reels', icon: Video },
     { name: 'Settings', path: '/dashboard/settings', icon: SettingsIcon },
   ];
 
@@ -138,7 +135,6 @@ const DashboardLayout = () => {
             <Routes>
               <Route path="/" element={<Overview user={user} />} />
               <Route path="/menu" element={<MenuManager user={user} />} />
-              <Route path="/reels" element={<ReelsManager user={user} />} />
               <Route path="/settings" element={<Settings user={user} />} />
             </Routes>
           </div>

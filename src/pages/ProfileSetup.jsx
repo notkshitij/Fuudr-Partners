@@ -11,6 +11,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -76,20 +77,13 @@ const ProfileSetup = () => {
   };
 
   const uploadFile = async (file, path) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}_${path}_${Math.random()}.${fileExt}`;
-    
-    const { data, error } = await supabase.storage
-      .from('partner_documents')
-      .upload(fileName, file);
-
-    if (error) throw error;
-    
-    const { data: publicUrlData } = supabase.storage
-      .from('partner_documents')
-      .getPublicUrl(fileName);
-      
-    return publicUrlData.publicUrl;
+    try {
+      const url = await uploadToCloudinary(file, 'auto');
+      return url;
+    } catch (err) {
+      console.error(`Upload failed for ${path}:`, err);
+      throw new Error(`Failed to upload ${path} to Cloudinary. Check your API keys.`);
+    }
   };
 
   const submitProfile = async () => {
