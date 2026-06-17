@@ -86,15 +86,19 @@ const SignUp = () => {
             provides_delivery: formData.providesDelivery === 'yes',
             password: hashedPassword // Storing the hash
           }
-        ]);
+        ])
+        .select()
+        .single();
 
-      if (error) {
-        throw error;
+      if (error || !data) {
+        throw error || new Error('Failed to create account.');
       }
 
-      // Success, redirect to SignIn
-      alert("Registration successful! Please sign in.");
-      navigate('/');
+      // Save user session
+      localStorage.setItem('partnerUser', JSON.stringify(data));
+
+      // Success, redirect to Onboarding
+      navigate('/setup-profile');
       
     } catch (err) {
       console.error("Error signing up:", err.message);

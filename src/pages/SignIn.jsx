@@ -49,11 +49,16 @@ const SignIn = () => {
         throw new Error('Invalid email or password.');
       }
 
-      // Success! Here you'd normally set user context/state
-      alert('Sign In Successful! Welcome back, ' + data.owner_name);
+      // Save user session
+      localStorage.setItem('partnerUser', JSON.stringify(data));
       
-      // Navigate to a placeholder dashboard (e.g. /dashboard) 
-      // For now, let's just clear the form or stay here since we don't have a dashboard yet
+      // Check if profile setup is incomplete (e.g., missing opening_time)
+      if (!data.opening_time) {
+        navigate('/setup-profile');
+      } else {
+        alert('Sign In Successful! Welcome back, ' + data.owner_name);
+        // Here you would navigate to the dashboard later
+      }
       
     } catch (err) {
       console.error('Sign In Error:', err);
