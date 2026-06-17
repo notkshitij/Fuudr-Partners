@@ -133,7 +133,7 @@ const ProfileSetup = () => {
       }));
 
       setTimeout(() => {
-        alert("Setup Complete! (This would normally redirect to your dashboard)");
+        navigate('/dashboard');
       }, 1000);
 
     } catch (err) {

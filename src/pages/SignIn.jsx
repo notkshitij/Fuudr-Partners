@@ -56,8 +56,7 @@ const SignIn = () => {
       if (!data.opening_time) {
         navigate('/setup-profile');
       } else {
-        alert('Sign In Successful! Welcome back, ' + data.owner_name);
-        // Here you would navigate to the dashboard later
+        navigate('/dashboard');
       }
       
     } catch (err) {
