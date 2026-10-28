@@ -1,43 +1,230 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Image as ImageIcon, X, Upload, UtensilsCrossed, Video, Trash2, Pencil, ToggleLeft, ToggleRight, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Plus, 
+  Image as ImageIcon, 
+  X, 
+  UtensilsCrossed, 
+  Video, 
+  Trash2, 
+  Pencil, 
+  ToggleLeft, 
+  ToggleRight, 
+  EyeOff,
+  Play, 
+  Layers, 
+  Check, 
+  Search,
+  ExternalLink,
+  LoaderCircle
+} from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { uploadToCloudinary } from '../../utils/cloudinary';
+import { deleteBunnyVideo, uploadVideoToBunny } from '../../utils/bunnyStream';
+import AdaptiveVideo from '../../components/AdaptiveVideo';
+
+const ReelPlayer = ({ item, onClose }) => {
+  const reels = (item.reels || []).filter(r => r.video_url);
+  const [currentIdx, setCurrentIdx] = React.useState(0);
+  const [isPlaying, setIsPlaying] = React.useState(true);
+  const [showIcon, setShowIcon] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const videoRef = React.useRef(null);
+
+  const goTo = (idx) => {
+    if (idx < 0 || idx >= reels.length) return;
+    setCurrentIdx(idx);
+    setProgress(0);
+    setIsPlaying(true);
+  };
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setIsPlaying(true); }
+    else { v.pause(); setIsPlaying(false); }
+    setShowIcon(true);
+    setTimeout(() => setShowIcon(false), 700);
+  };
+
+  React.useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = 0;
+    v.play().catch(() => {});
+    setIsPlaying(true);
+    const onTimeUpdate = () => setProgress(v.duration ? v.currentTime / v.duration : 0);
+    const onEnded = () => { if (currentIdx < reels.length - 1) goTo(currentIdx + 1); };
+    v.addEventListener('timeupdate', onTimeUpdate);
+    v.addEventListener('ended', onEnded);
+    return () => { v.removeEventListener('timeupdate', onTimeUpdate); v.removeEventListener('ended', onEnded); };
+  }, [currentIdx]);
+
+  if (reels.length === 0) return (
+    <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center" onClick={onClose}>
+      <div className="text-center text-slate-400 p-8">
+        <Video size={48} className="mx-auto mb-4 opacity-30" />
+        <p className="text-lg font-bold text-slate-300">No Reel Available</p>
+      </div>
+    </div>
+  );
+
+  const videoUrl = reels[currentIdx].video_url;
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center" onClick={onClose}>
+      <button onClick={onClose} className="absolute top-6 right-6 text-white/60 hover:text-white bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors z-10">
+        <X size={24} />
+      </button>
+
+      <div
+        className="relative bg-black shadow-2xl overflow-hidden"
+        style={{ width: 'min(380px, 90vw)', aspectRatio: '9/16', borderRadius: '2rem' }}
+        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+      >
+        <AdaptiveVideo
+          key={videoUrl}
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          autoPlay
+          playsInline
+        />
+
+        {/* Story bars */}
+        <div className="absolute top-4 left-4 right-4 flex gap-1.5 z-10" onClick={e => e.stopPropagation()}>
+          {reels.map((_, i) => (
+            <div key={i} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden cursor-pointer" onClick={() => goTo(i)}>
+              <div
+                className="h-full bg-white rounded-full transition-none"
+                style={{ width: i < currentIdx ? '100%' : i === currentIdx ? `${progress * 100}%` : '0%' }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Left / Right tap zones */}
+        <div className="absolute inset-y-0 left-0 w-1/3 z-10" onClick={(e) => { e.stopPropagation(); goTo(currentIdx - 1); }} />
+        <div className="absolute inset-y-0 right-0 w-1/3 z-10" onClick={(e) => { e.stopPropagation(); goTo(currentIdx + 1); }} />
+
+        {/* Arrow icons */}
+        {currentIdx > 0 && (
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+            <div className="bg-black/40 backdrop-blur-sm rounded-full p-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            </div>
+          </div>
+        )}
+        {currentIdx < reels.length - 1 && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+            <div className="bg-black/40 backdrop-blur-sm rounded-full p-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-none">
+          <p className="text-orange-400 font-black text-xs uppercase tracking-widest mb-1">{item.category_name}</p>
+          <h3 className="text-white font-bold text-2xl leading-tight mb-1">{item.name}</h3>
+          {item.description && <p className="text-white/70 text-sm mb-3 line-clamp-2">{item.description}</p>}
+          <div className="bg-orange-500 text-white font-bold px-4 py-1.5 rounded-full w-max text-sm shadow-lg">₹{item.price}</div>
+        </div>
+
+        {/* Play/pause flash */}
+        {showIcon && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+            <div className="bg-black/50 rounded-full p-5">
+              {isPlaying
+                ? <Play className="text-white fill-white" size={32} />
+                : <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="white" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              }
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const MenuManager = ({ user }) => {
+  const navigate = useNavigate();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [partnerAddons, setPartnerAddons] = useState([]);
+  const [selectedAddonIds, setSelectedAddonIds] = useState([]);
+  const [addonSearchTerm, setAddonSearchTerm] = useState('');
+  const [loadingEditId, setLoadingEditId] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null); 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deletingItemId, setDeletingItemId] = useState(null);
   const [activeVideoItem, setActiveVideoItem] = useState(null);
+  const [previewVideoUrl, setPreviewVideoUrl] = useState(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'in_stock' | 'out_of_stock'
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
     category_name: '',
-    is_veg: true
+    is_veg: true,
+    is_in_stock: true
   });
+  const [quantities, setQuantities] = useState([]);
   const [imageFile, setImageFile] = useState(null);
-  const [videoFile, setVideoFile] = useState(null);
+  const [videoFiles, setVideoFiles] = useState([]);
+  const [existingReels, setExistingReels] = useState([]);
+  const [deletedReelIds, setDeletedReelIds] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState('');
 
   const fetchMenu = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch menu items along with reels and linked addons
+      let { data, error } = await supabase
         .from('menu_items')
-        .select('*, reels(video_url)')
+        .select('*, reels(id, video_url, video_provider, provider_video_id, thumbnail_url), menu_item_addons(id, addon_id, dish_addons(*))')
         .eq('partner_id', user.id)
         .order('created_at', { ascending: false });
-      if (error) throw error;
+
+      if (error) {
+        // Graceful fallback if junction table is still being initialized
+        const fallback = await supabase
+          .from('menu_items')
+          .select('*, reels(id, video_url, video_provider, provider_video_id, thumbnail_url)')
+          .eq('partner_id', user.id)
+          .order('created_at', { ascending: false });
+        data = fallback.data;
+      }
       setMenuItems(data || []);
     } catch (err) {
       console.error("Error fetching menu:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPartnerAddons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dish_addons')
+        .select('*')
+        .eq('partner_id', user.id)
+        .order('name', { ascending: true });
+      if (!error && data) {
+        setPartnerAddons(data);
+      }
+    } catch (err) {
+      console.error("Error fetching partner addons:", err);
     }
   };
 
@@ -60,7 +247,22 @@ const MenuManager = ({ user }) => {
   useEffect(() => {
     fetchMenu();
     fetchCategories();
+    fetchPartnerAddons();
   }, [user.id]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (activeVideoItem) {
+          setActiveVideoItem(null);
+        } else if (isModalOpen) {
+          resetModal();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeVideoItem, isModalOpen]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -76,52 +278,140 @@ const MenuManager = ({ user }) => {
       if (file.size > 5 * 1024 * 1024) { setErrorMsg("Image size should be less than 5MB"); return; }
       setImageFile(file);
       setErrorMsg('');
+      setSuccessMsg('');
     }
   };
 
   const handleVideoChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      if (file.size > 50 * 1024 * 1024) { setErrorMsg("Video size should be less than 50MB"); return; }
-      setVideoFile(file);
+      const newFiles = Array.from(e.target.files).filter(f => {
+        if (f.size > 50 * 1024 * 1024) { setErrorMsg(`${f.name} exceeds 50MB limit`); return false; }
+        return true;
+      });
+      setVideoFiles(prev => [...prev, ...newFiles]);
       setErrorMsg('');
+      setSuccessMsg('');
+      e.target.value = '';
     }
+  };
+
+  const removeVideoFile = (index) => {
+    setVideoFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const openAddModal = () => {
     setEditItem(null);
     setImageFile(null);
-    setVideoFile(null);
+    setVideoFiles([]);
     setErrorMsg('');
-    setFormData({ name: '', description: '', price: '', category_name: categories[0]?.name || '', is_veg: true });
+    setSuccessMsg('');
+    setQuantities([]);
+    setSelectedAddonIds([]);
+    setAddonSearchTerm('');
+    setFormData({ name: '', description: '', price: '', category_name: categories[0]?.name || '', is_veg: true, is_in_stock: true });
     setIsModalOpen(true);
   };
 
-  const openEditModal = (item) => {
-    setEditItem(item);
-    setImageFile(null);
-    setVideoFile(null);
-    setErrorMsg('');
-    setFormData({
-      name: item.name,
-      description: item.description || '',
-      price: item.price,
-      category_name: item.category_name,
-      is_veg: item.is_veg
-    });
-    setIsModalOpen(true);
+  const openEditModal = async (item) => {
+    setLoadingEditId(item.id);
+    try {
+      setEditItem(item);
+      setImageFile(null);
+      setVideoFiles([]);
+      setDeletedReelIds([]);
+      setErrorMsg('');
+      setSuccessMsg('');
+      setAddonSearchTerm('');
+      setFormData({
+        name: item.name,
+        description: item.description || '',
+        price: item.price,
+        category_name: item.category_name,
+        is_veg: item.is_veg,
+        is_in_stock: item.is_in_stock !== false
+      });
+      setQuantities(item.quantities || []);
+
+      // Fetch linked addons and saved reels in parallel
+      const [addonsRes, reelsRes] = await Promise.all([
+        supabase.from('menu_item_addons').select('addon_id').eq('menu_item_id', item.id),
+        supabase.from('reels').select('id, video_url, video_provider, provider_video_id, thumbnail_url').eq('menu_item_id', item.id)
+      ]);
+
+      if (addonsRes.data && addonsRes.data.length > 0) {
+        setSelectedAddonIds(addonsRes.data.map(l => l.addon_id));
+      } else if (item.menu_item_addons && Array.isArray(item.menu_item_addons)) {
+        setSelectedAddonIds(item.menu_item_addons.map(a => a.addon_id || a.dish_addons?.id).filter(Boolean));
+      } else {
+        setSelectedAddonIds([]);
+      }
+
+      setExistingReels(reelsRes.data || []);
+      setIsModalOpen(true);
+    } catch (err) {
+      console.error("Error opening edit modal:", err);
+      setIsModalOpen(true);
+    } finally {
+      setLoadingEditId(null);
+    }
   };
 
-  const resetModal = () => {
+  function resetModal() {
     setIsModalOpen(false);
     setEditItem(null);
     setErrorMsg('');
+    setSuccessMsg('');
     setImageFile(null);
-    setVideoFile(null);
-    setFormData({ name: '', description: '', price: '', category_name: categories[0]?.name || '', is_veg: true });
+    setVideoFiles([]);
+    setExistingReels([]);
+    setDeletedReelIds([]);
+    setQuantities([]);
+    setSelectedAddonIds([]);
+    setAddonSearchTerm('');
+    setFormData({ name: '', description: '', price: '', category_name: categories[0]?.name || '', is_veg: true, is_in_stock: true });
+  }
+
+  const toggleAddonSelection = (addonId) => {
+    setSelectedAddonIds(prev => 
+      prev.includes(addonId) 
+        ? prev.filter(id => id !== addonId) 
+        : [...prev, addonId]
+    );
   };
 
-  // Toggle availability
+  const addQuantityRow = () => setQuantities(prev => [...prev, { name: '', price: '' }]);
+  const removeQuantityRow = (i) => setQuantities(prev => prev.filter((_, idx) => idx !== i));
+  const updateQuantityRow = (i, field, value) => setQuantities(prev => prev.map((q, idx) => idx === i ? { ...q, [field]: value } : q));
+
+  // Toggle stock availability
+  const handleToggleStock = async (item) => {
+    const currentStock = item.is_in_stock !== false;
+    const newStock = !currentStock;
+
+    // Optimistic UI update
+    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, is_in_stock: newStock } : m));
+
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_in_stock: newStock })
+        .eq('id', item.id);
+
+      if (error) {
+        if (error.code === 'PGRST204' || error.message?.includes('is_in_stock')) {
+          console.warn("Database column 'is_in_stock' missing in Supabase.");
+          setErrorMsg("Column 'is_in_stock' missing in database. Please run the migration SQL in Supabase SQL Editor: ALTER TABLE menu_items ADD COLUMN is_in_stock BOOLEAN DEFAULT TRUE;");
+        }
+        throw error;
+      }
+    } catch (err) {
+      console.error("Toggle stock error:", err);
+      // Revert optimistic update
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, is_in_stock: currentStock } : m));
+    }
+  };
+
+  // Toggle availability (Feed Visibility)
   const handleToggleAvailability = async (item) => {
     try {
       const { error } = await supabase
@@ -137,8 +427,17 @@ const MenuManager = ({ user }) => {
 
   // Delete dish + its reel
   const handleDelete = async (itemId) => {
+    if (deletingItemId) return;
+    setDeletingItemId(itemId);
     try {
-      // Delete linked reel first
+      const { data: reelsToDelete, error: reelsError } = await supabase
+        .from('reels')
+        .select('video_provider, provider_video_id')
+        .eq('menu_item_id', itemId);
+      if (reelsError) throw reelsError;
+      await Promise.all((reelsToDelete || [])
+        .filter(reel => reel.video_provider === 'bunny' && reel.provider_video_id)
+        .map(reel => deleteBunnyVideo(reel.provider_video_id)));
       await supabase.from('reels').delete().eq('menu_item_id', itemId);
       // Delete menu item
       const { error } = await supabase.from('menu_items').delete().eq('id', itemId);
@@ -147,136 +446,286 @@ const MenuManager = ({ user }) => {
       setDeleteConfirmId(null);
     } catch (err) {
       console.error("Delete error:", err);
+    } finally {
+      setDeletingItemId(null);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const isAddMore = e.nativeEvent.submitter?.name === 'save_and_add';
 
     const isAddMode = !editItem;
 
     // In add mode both are mandatory
     if (isAddMode && !imageFile) { setErrorMsg("Dish photo is required."); return; }
-    if (isAddMode && !videoFile) { setErrorMsg("Dish reel is required."); return; }
+    if (isAddMode && videoFiles.length === 0) { setErrorMsg("At least one dish reel is required."); return; }
 
     setIsSubmitting(true);
+    setUploadProgress(0);
+    setUploadStage('');
     setErrorMsg('');
+    setSuccessMsg('');
+    let uploadedVideos = [];
+    let videosPersisted = false;
 
     try {
       const selectedCategory = categories.find(c => c.name === formData.category_name);
       const categoryId = selectedCategory ? selectedCategory.id : null;
 
-      let imageUrl = editItem?.image_url || null;
-      let videoUrl = null;
+      // Images remain on Cloudinary; new reels use Bunny Stream.
+      const imageUploadPromise = imageFile
+        ? uploadToCloudinary(imageFile, 'image')
+        : Promise.resolve(editItem?.image_url || null);
 
-      // Upload new image if provided
-      if (imageFile) {
-        imageUrl = await uploadToCloudinary(imageFile, 'image');
+      const newVideos = [];
+      for (let index = 0; index < videoFiles.length; index += 1) {
+        const updateProgress = (stage, progress) => {
+          const stageOffset = stage === 'uploading' ? 0 : 80;
+          const stageWeight = stage === 'uploading' ? 80 : 20;
+          const currentVideoProgress = stageOffset + ((Math.min(100, progress) / 100) * stageWeight);
+          setUploadProgress(Math.min(99, Math.round(((index + (currentVideoProgress / 100)) / videoFiles.length) * 100)));
+          setUploadStage(stage);
+        };
+        newVideos.push(await uploadVideoToBunny(videoFiles[index], {
+          onUploadProgress: progress => updateProgress('uploading', progress),
+          onProcessingProgress: progress => updateProgress('processing', progress),
+        }));
       }
 
-      // Upload new video if provided
-      if (videoFile) {
-        videoUrl = await uploadToCloudinary(videoFile, 'video');
-      }
+      const imageUrl = await imageUploadPromise;
+      uploadedVideos = newVideos;
 
       if (isAddMode) {
         // INSERT
-        const { data: menuItem, error: menuError } = await supabase
-          .from('menu_items')
-          .insert([{
-            partner_id: user.id,
-            category_id: categoryId,
-            category_name: formData.category_name,
-            name: formData.name,
-            description: formData.description,
-            price: parseFloat(formData.price),
-            is_veg: formData.is_veg,
-            image_url: imageUrl,
-          }])
-          .select()
-          .single();
-        if (menuError) throw menuError;
-
-        // Insert reel
-        await supabase.from('reels').insert([{
+        const insertPayload = {
           partner_id: user.id,
-          menu_item_id: menuItem.id,
           category_id: categoryId,
           category_name: formData.category_name,
-          dish_name: formData.name,
+          name: formData.name,
           description: formData.description,
           price: parseFloat(formData.price),
-          video_url: videoUrl,
-        }]);
+          is_veg: formData.is_veg,
+          is_in_stock: formData.is_in_stock !== false,
+          image_url: imageUrl,
+          quantities: quantities.filter(q => q.name.trim() && q.price !== '').map(q => ({ name: q.name.trim(), price: parseFloat(q.price) })),
+        };
+
+        let { data: menuItem, error: menuError } = await supabase
+          .from('menu_items')
+          .insert([insertPayload])
+          .select()
+          .single();
+
+        // Fallback retry if column is_in_stock doesn't exist yet in Supabase schema
+        if (menuError && (menuError.code === 'PGRST204' || menuError.message?.includes('is_in_stock'))) {
+          console.warn("Retrying insert without is_in_stock until database migration is run");
+          const dataWithoutStock = { ...insertPayload };
+          delete dataWithoutStock.is_in_stock;
+          const retry = await supabase.from('menu_items').insert([dataWithoutStock]).select().single();
+          menuItem = retry.data;
+          menuError = retry.error;
+        }
+
+        if (menuError) throw menuError;
+
+        // Insert all reels — dish data lives on menu_items now,
+        // so reels only store the link + video.
+        const { error: reelsInsertError } = await supabase.from('reels').insert(newVideos.map(video => ({
+          partner_id: user.id,
+          menu_item_id: menuItem.id,
+          video_url: video.url,
+          video_provider: video.provider,
+          provider_video_id: video.providerVideoId,
+          thumbnail_url: video.thumbnailUrl,
+        })));
+        if (reelsInsertError) throw reelsInsertError;
+        videosPersisted = true;
+
+        // Link selected accompaniments
+        if (selectedAddonIds.length > 0) {
+          try {
+            await supabase.from('menu_item_addons').insert(
+              selectedAddonIds.map(addonId => ({
+                menu_item_id: menuItem.id,
+                addon_id: addonId
+              }))
+            );
+          } catch (addonErr) {
+            console.warn("Could not link accompaniments:", addonErr);
+          }
+        }
 
       } else {
         // UPDATE menu item
-        const { error: updateError } = await supabase
+        const updatePayload = {
+          category_id: categoryId,
+          category_name: formData.category_name,
+          name: formData.name,
+          description: formData.description,
+          price: parseFloat(formData.price),
+          is_veg: formData.is_veg,
+          is_in_stock: formData.is_in_stock !== false,
+          image_url: imageUrl,
+          quantities: quantities.filter(q => q.name.trim() && q.price !== '').map(q => ({ name: q.name.trim(), price: parseFloat(q.price) })),
+        };
+
+        let { error: updateError } = await supabase
           .from('menu_items')
-          .update({
-            category_id: categoryId,
-            category_name: formData.category_name,
-            name: formData.name,
-            description: formData.description,
-            price: parseFloat(formData.price),
-            is_veg: formData.is_veg,
-            image_url: imageUrl,
-          })
+          .update(updatePayload)
           .eq('id', editItem.id);
+
+        // Fallback retry if column is_in_stock doesn't exist yet in Supabase schema
+        if (updateError && (updateError.code === 'PGRST204' || updateError.message?.includes('is_in_stock'))) {
+          console.warn("Retrying update without is_in_stock until database migration is run");
+          const updateWithoutStock = { ...updatePayload };
+          delete updateWithoutStock.is_in_stock;
+          const retry = await supabase.from('menu_items').update(updateWithoutStock).eq('id', editItem.id);
+          updateError = retry.error;
+        }
+
         if (updateError) throw updateError;
 
-        // Update linked reel if new video uploaded
-        if (videoUrl) {
-          await supabase.from('reels')
-            .update({
-              category_id: categoryId,
-              category_name: formData.category_name,
-              dish_name: formData.name,
-              description: formData.description,
-              price: parseFloat(formData.price),
-              video_url: videoUrl,
-            })
-            .eq('menu_item_id', editItem.id);
-        } else {
-          // Update reel metadata even without new video
-          await supabase.from('reels')
-            .update({
-              category_id: categoryId,
-              category_name: formData.category_name,
-              dish_name: formData.name,
-              description: formData.description,
-              price: parseFloat(formData.price),
-            })
-            .eq('menu_item_id', editItem.id);
+        // Delete removed reels
+        if (deletedReelIds.length > 0) {
+          const { data: removedReels, error: removedReelsError } = await supabase
+            .from('reels')
+            .select('video_provider, provider_video_id')
+            .in('id', deletedReelIds);
+          if (removedReelsError) throw removedReelsError;
+          await Promise.all(removedReels
+            .filter(reel => reel.video_provider === 'bunny' && reel.provider_video_id)
+            .map(reel => deleteBunnyVideo(reel.provider_video_id)));
+          await supabase.from('reels').delete().in('id', deletedReelIds);
+        }
+        // Dish metadata (name, price, description, category) lives on menu_items —
+        // already updated above. Reels carry no dish data, so nothing to update here.
+
+        // Insert new reels
+        if (newVideos.length > 0) {
+          const { error: reelsInsertError } = await supabase.from('reels').insert(newVideos.map(video => ({
+            partner_id: user.id,
+            menu_item_id: editItem.id,
+            video_url: video.url,
+            video_provider: video.provider,
+            provider_video_id: video.providerVideoId,
+            thumbnail_url: video.thumbnailUrl,
+          })));
+          if (reelsInsertError) throw reelsInsertError;
+        }
+        videosPersisted = true;
+
+        // Sync linked accompaniments
+        try {
+          await supabase.from('menu_item_addons').delete().eq('menu_item_id', editItem.id);
+          if (selectedAddonIds.length > 0) {
+            await supabase.from('menu_item_addons').insert(
+              selectedAddonIds.map(addonId => ({
+                menu_item_id: editItem.id,
+                addon_id: addonId
+              }))
+            );
+          }
+        } catch (addonErr) {
+          console.warn("Could not sync accompaniments:", addonErr);
         }
       }
 
-      resetModal();
       fetchMenu();
+      setUploadProgress(100);
+      setUploadStage('saving');
+
+      if (isAddMore) {
+        // Keep modal open, clear name/desc/price/files, keep category & veg
+        setFormData(prev => ({ ...prev, name: '', description: '', price: '' }));
+        setImageFile(null);
+        setVideoFiles([]);
+        setSuccessMsg(`Successfully added! You can add another dish in ${formData.category_name}.`);
+        
+        // Reset file inputs manually
+        const imageInput = document.getElementById('dishImage');
+        if (imageInput) imageInput.value = '';
+        const videoInput = document.getElementById('dishVideo');
+        if (videoInput) videoInput.value = '';
+      } else {
+        resetModal();
+      }
 
     } catch (err) {
       console.error("Error saving dish:", err);
+      if (!videosPersisted && uploadedVideos.length > 0) {
+        await Promise.all(uploadedVideos.map(video => deleteBunnyVideo(video.providerVideoId, video.uploadToken).catch(() => {})));
+      }
       setErrorMsg(err.message || "Failed to save dish.");
     } finally {
       setIsSubmitting(false);
+      setUploadStage('');
     }
   };
 
+  const inStockCount = menuItems.filter(m => m.is_in_stock !== false).length;
+  const outOfStockCount = menuItems.filter(m => m.is_in_stock === false).length;
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (stockFilter === 'in_stock') return item.is_in_stock !== false;
+    if (stockFilter === 'out_of_stock') return item.is_in_stock === false;
+    return true;
+  });
+
   return (
-    <div className="animate-fadeIn">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+    <div className="animate-fadeIn pb-10">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 sm:mb-6 gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-1">Menu Management</h1>
-          <p className="text-slate-500">Manage your restaurant's dishes and pricing.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-0.5 sm:mb-1">Menu Management</h1>
+          <p className="text-xs sm:text-sm text-slate-500">Manage your restaurant's dishes, pricing, and live stock.</p>
         </div>
         <button
+          type="button"
           onClick={openAddModal}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-orange-500/30"
+          className="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm md:text-base bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-xl font-bold transition-all shadow-md sm:shadow-lg hover:shadow-orange-500/30 shrink-0"
         >
-          <Plus size={20} />
-          Add New Dish
+          <Plus size={16} className="sm:w-5 sm:h-5 shrink-0" />
+          <span>Add New Dish</span>
         </button>
       </div>
+
+      {/* Stock Filter Chips */}
+      {menuItems.length > 0 && (
+        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
+          <button
+            onClick={() => setStockFilter('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              stockFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All Dishes ({menuItems.length})
+          </button>
+          <button
+            onClick={() => setStockFilter('in_stock')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              stockFilter === 'in_stock'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            In Stock ({inStockCount})
+          </button>
+          <button
+            onClick={() => setStockFilter('out_of_stock')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              stockFilter === 'out_of_stock'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-rose-50 hover:text-rose-700'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            Out of Stock ({outOfStockCount})
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center items-center h-64">
@@ -297,139 +746,262 @@ const MenuManager = ({ user }) => {
             Add Your First Dish
           </button>
         </div>
+      ) : filteredMenuItems.length === 0 ? (
+        <div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">No dishes match this stock filter</h3>
+          <p className="text-slate-500 text-sm mb-4">Currently no dishes are marked as {stockFilter === 'in_stock' ? 'in stock' : 'out of stock'}.</p>
+          <button
+            onClick={() => setStockFilter('all')}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors"
+          >
+            View All Dishes
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {menuItems.map(item => (
-            <div 
-              key={item.id} 
-              className={`relative group aspect-[9/16] bg-slate-900 rounded-[2rem] overflow-hidden shadow-sm hover:shadow-xl transition-all cursor-pointer ${!item.is_available ? 'opacity-60 grayscale-[50%]' : ''}`}
-              onClick={() => setActiveVideoItem(item)}
-            >
-              {/* Background Image or Video */}
-              {item.reels && item.reels.length > 0 && item.reels[0].video_url ? (
-                <video 
-                  src={item.reels[0].video_url} 
-                  poster={item.image_url || undefined}
-                  className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
-                  loop
-                  muted
-                  playsInline
-                  onMouseOver={e => {
-                    const playPromise = e.target.play();
-                    if (playPromise !== undefined) {
-                      playPromise.catch(error => console.log("Auto-play prevented", error));
-                    }
-                  }}
-                  onMouseOut={e => {
-                    e.target.pause();
-                    e.target.currentTime = 0;
-                  }}
-                />
-              ) : item.image_url ? (
-                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-500">
-                  <ImageIcon size={48} />
-                </div>
-              )}
-              
-              {/* Overlay Gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none flex flex-col justify-end p-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          {filteredMenuItems.map(item => {
+            const isInStock = item.is_in_stock !== false;
+            const isAvailable = item.is_available;
+            const hasReel = item.reels && item.reels.length > 0 && item.reels[0].video_url;
+
+            return (
+              <div 
+                key={item.id} 
+                className={`relative group aspect-[9/16] bg-slate-900 rounded-[2rem] overflow-hidden shadow-sm hover:shadow-xl transition-all cursor-pointer ${!isAvailable ? 'opacity-60 grayscale-[50%]' : ''}`}
+                onClick={() => setActiveVideoItem(item)}
+              >
+                {/* Background Image or Video */}
+                {hasReel ? (
+                  <AdaptiveVideo
+                    src={item.reels[0].video_url} 
+                    poster={item.image_url || undefined}
+                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
+                    loop
+                    muted
+                    playsInline
+                    onMouseOver={e => {
+                      const playPromise = e.target.play();
+                      if (playPromise !== undefined) {
+                        playPromise.catch(error => console.log("Auto-play prevented", error));
+                      }
+                    }}
+                    onMouseOut={e => {
+                      e.target.pause();
+                      e.target.currentTime = 0;
+                    }}
+                  />
+                ) : item.image_url ? (
+                  <img src={item.image_url} alt={item.name} className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-500">
+                    <ImageIcon size={48} />
+                  </div>
+                )}
                 
-                {/* Top Badges */}
-                <div className="absolute top-4 right-4 flex flex-col gap-2 pointer-events-none">
-                  <div className="bg-white/90 backdrop-blur-md p-2 rounded-full shadow-lg">
-                    <div className={`w-3 h-3 rounded-full ${item.is_veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  </div>
-                  {!item.is_available && (
-                    <div className="bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg flex items-center justify-center">
-                       <ToggleLeft size={16} className="text-slate-500" />
+                {/* Top Badges Bar: Stock Quick-Toggle & Food Type / Status */}
+                <div className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 flex items-start justify-between gap-2 z-10 pointer-events-none">
+                  {/* Top Left: Interactive Stock Badge / Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleStock(item);
+                    }}
+                    className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold shadow-lg backdrop-blur-md transition-all cursor-pointer border active:scale-95 ${
+                      isInStock
+                        ? 'bg-emerald-500/90 hover:bg-emerald-600 text-white border-emerald-400/30'
+                        : 'bg-rose-600/95 hover:bg-rose-700 text-white border-rose-400/40 shadow-rose-900/40 ring-2 ring-rose-500/40'
+                    }`}
+                    title={isInStock ? "In Stock — Click to mark Out of Stock" : "Out of Stock — Click to mark In Stock"}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isInStock ? 'bg-white' : 'bg-rose-200 animate-pulse'}`} />
+                    <span>{isInStock ? 'In Stock' : 'Out of Stock'}</span>
+                  </button>
+
+                  {/* Top Right: Veg indicator, Reel badge & Feed Visibility badge */}
+                  <div className="flex flex-col gap-1.5 items-end">
+                    <div className="bg-white/90 backdrop-blur-md p-1.5 sm:p-2 rounded-full shadow-lg">
+                      <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${item.is_veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     </div>
-                  )}
+                    {hasReel && (
+                      <div 
+                        className="bg-black/60 backdrop-blur-md p-1 sm:p-1.5 rounded-full shadow-lg flex items-center justify-center text-white"
+                        title="Reel video available - tap to play"
+                      >
+                        <Video size={13} className="sm:w-3.5 sm:h-3.5" />
+                      </div>
+                    )}
+                    {!isAvailable && (
+                      <div 
+                        className="bg-white/90 backdrop-blur-md p-1 sm:p-1.5 rounded-full shadow-lg flex items-center justify-center text-slate-500"
+                        title="Hidden from feed"
+                      >
+                        <EyeOff size={14} className="sm:w-4 sm:h-4" />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Details Overlay */}
-                <div className="pointer-events-auto">
-                  <div className="text-orange-400 font-black text-xs uppercase tracking-widest mb-1">{item.category_name}</div>
-                  <h3 className="text-white font-bold text-xl leading-tight mb-2 drop-shadow-md">{item.name}</h3>
-                  <div className="bg-orange-500 text-white font-bold px-3 py-1 rounded-lg w-max text-sm mb-4 shadow-lg shadow-orange-500/20">
-                    ₹{item.price}
-                  </div>
+                {/* Overlay Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent pointer-events-none flex flex-col justify-end p-3 sm:p-4">
+                  {/* Details Overlay */}
+                  <div className="pointer-events-auto">
+                    <div className="text-orange-400 font-black text-[10px] sm:text-xs uppercase tracking-widest mb-0.5 sm:mb-1">{item.category_name}</div>
+                    <h3 className="text-white font-bold text-base sm:text-xl leading-tight mb-0.5 sm:mb-1 drop-shadow-md truncate" title={item.name}>{item.name}</h3>
+                    {item.description && item.description.trim() !== '-' && (
+                      <p className="text-white/70 text-[11px] sm:text-xs leading-snug mb-1.5 sm:mb-2 line-clamp-1 sm:line-clamp-2">{item.description}</p>
+                    )}
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+                      <div className="bg-orange-500 text-white font-bold px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-lg w-max text-xs sm:text-sm shadow-lg shadow-orange-500/20">
+                        ₹{item.price}
+                      </div>
+                      {item.menu_item_addons && item.menu_item_addons.length > 0 && (
+                        <div className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold text-orange-200 border border-white/10">
+                          <Layers size={11} className="sm:w-3 sm:h-3" />
+                          <span>{item.menu_item_addons.length} Add-on{item.menu_item_addons.length > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Delete Confirmation Inline */}
-                  {deleteConfirmId === item.id ? (
-                    <div className="flex flex-col gap-2 mb-2 animate-fadeIn bg-black/60 p-3 rounded-xl backdrop-blur-md">
-                      <p className="text-white text-xs font-bold text-center">Delete dish?</p>
-                      <div className="flex gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="flex-1 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors">
-                          Yes
+                    {/* Delete Confirmation Inline */}
+                    {deleteConfirmId === item.id ? (
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex flex-col gap-1.5 sm:gap-2 mb-1 animate-fadeIn bg-black/90 p-2.5 sm:p-3 rounded-xl backdrop-blur-md border border-rose-500/40 shadow-xl"
+                      >
+                        <p className="text-white text-[11px] sm:text-xs font-bold text-center">Delete this dish?</p>
+                        <div className="flex gap-1.5 sm:gap-2">
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} 
+                            disabled={deletingItemId === item.id}
+                            className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-red-500/70 disabled:cursor-wait text-white text-[11px] sm:text-xs font-bold rounded-lg transition-colors shadow flex items-center justify-center gap-1"
+                          >
+                            {deletingItemId === item.id ? <><LoaderCircle size={13} className="animate-spin" /> Deleting…</> : 'Yes'}
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }} 
+                            disabled={deletingItemId === item.id}
+                            className="flex-1 py-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] sm:text-xs font-bold rounded-lg transition-colors"
+                          >
+                            No
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Action buttons: ALWAYS visible on mobile (2x2 grid), revealed on hover on desktop (4 in a row) */
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-1.5 opacity-100 translate-y-0 md:opacity-0 md:group-hover:opacity-100 md:translate-y-2 md:group-hover:translate-y-0 transition-all duration-300">
+                        {/* Edit Dish */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openEditModal(item); }}
+                          disabled={loadingEditId === item.id}
+                          className="py-1.5 px-2 rounded-xl bg-white/20 hover:bg-white/30 active:bg-white/40 backdrop-blur-md text-white border border-white/10 transition-colors flex items-center justify-center gap-1 sm:flex-col sm:gap-0.5 sm:py-2"
+                          title="Edit Dish"
+                        >
+                          {loadingEditId === item.id ? (
+                            <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                          ) : (
+                            <Pencil size={13} className="sm:w-4 sm:h-4 shrink-0" />
+                          )}
+                          <span className="text-[10px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-100">Edit</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }} className="flex-1 py-1.5 bg-white/20 text-white text-xs font-bold rounded-lg hover:bg-white/30 transition-colors">
-                          No
+
+                        {/* Stock Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleToggleStock(item); }}
+                          className={`py-1.5 px-2 rounded-xl backdrop-blur-md text-white border transition-colors flex items-center justify-center gap-1 sm:flex-col sm:gap-0.5 sm:py-2 ${
+                            isInStock 
+                              ? 'bg-emerald-600/90 hover:bg-emerald-600 active:bg-emerald-700 border-emerald-400/20' 
+                              : 'bg-rose-600/90 hover:bg-rose-600 active:bg-rose-700 border-rose-400/20'
+                          }`}
+                          title={isInStock ? "Stock: In Stock (Click to mark Out of Stock)" : "Stock: Out of Stock (Click to mark In Stock)"}
+                        >
+                          {isInStock ? <ToggleRight size={14} className="sm:w-4 sm:h-4 shrink-0" /> : <ToggleLeft size={14} className="sm:w-4 sm:h-4 shrink-0" />}
+                          <span className="text-[10px] sm:text-[9px] font-bold uppercase tracking-wider text-white">Stock</span>
+                        </button>
+
+                        {/* Feed Visibility Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleToggleAvailability(item); }}
+                          className={`py-1.5 px-2 rounded-xl backdrop-blur-md text-white border transition-colors flex items-center justify-center gap-1 sm:flex-col sm:gap-0.5 sm:py-2 ${
+                            isAvailable 
+                              ? 'bg-blue-600/90 hover:bg-blue-600 active:bg-blue-700 border-blue-400/20' 
+                              : 'bg-slate-700/90 hover:bg-slate-700 active:bg-slate-800 border-slate-500/20 text-slate-300'
+                          }`}
+                          title={isAvailable ? "Feed: Visible (Click to hide from feed)" : "Feed: Hidden (Click to show in feed)"}
+                        >
+                          {isAvailable ? <ToggleRight size={14} className="sm:w-4 sm:h-4 shrink-0" /> : <ToggleLeft size={14} className="sm:w-4 sm:h-4 shrink-0" />}
+                          <span className="text-[10px] sm:text-[9px] font-bold uppercase tracking-wider text-white">Feed</span>
+                        </button>
+
+                        {/* Delete Dish */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}
+                          disabled={Boolean(deletingItemId)}
+                          className="py-1.5 px-2 rounded-xl bg-rose-600/85 hover:bg-rose-600 active:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-md text-white border border-rose-400/20 transition-colors flex items-center justify-center gap-1 sm:flex-col sm:gap-0.5 sm:py-2"
+                          title="Delete Dish"
+                        >
+                          <Trash2 size={13} className="sm:w-4 sm:h-4 shrink-0" />
+                          <span className="text-[10px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-100">Delete</span>
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    /* Action buttons on hover */
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 duration-300">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEditModal(item); }}
-                        className="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white transition-colors flex-1 flex justify-center"
-                      >
-                        <Pencil size={18} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleAvailability(item); }}
-                        className={`p-2.5 rounded-xl backdrop-blur-md text-white transition-colors flex-1 flex justify-center ${item.is_available ? 'bg-green-500/80 hover:bg-green-500' : 'bg-slate-500/80 hover:bg-slate-500'}`}
-                        title={item.is_available ? "Mark Unavailable" : "Mark Available"}
-                      >
-                        {item.is_available ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}
-                        className="p-2.5 rounded-xl bg-red-500/80 hover:bg-red-500 backdrop-blur-md text-white transition-colors flex-1 flex justify-center"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Center Play Icon */}
-              {!deleteConfirmId && (
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 pointer-events-none">
-                  <Play className="text-white fill-white ml-1" size={32} />
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2rem] w-full max-w-2xl my-8 relative animate-slideUp">
-            <button onClick={resetModal} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors">
-              <X size={20} />
-            </button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[90vh] flex flex-col relative animate-slideUp shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-6 sm:px-8 sm:pt-6 sm:pb-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 mb-0.5">
+                  {editItem ? 'Edit Dish' : 'Add New Dish'}
+                </h2>
+                <p className="text-slate-400 text-xs">
+                  {editItem ? 'Update dish details and accompaniments.' : 'All fields are required.'}
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={resetModal} 
+                className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <div className="p-8 sm:p-10">
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">
-                {editItem ? 'Edit Dish' : 'Add New Dish'}
-              </h2>
-              <p className="text-slate-400 text-sm mb-6">
-                {editItem ? 'Update dish details. Upload new files to replace existing ones.' : 'All fields are required.'}
-              </p>
+            {/* Modal Scrollable Body */}
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="p-6 sm:p-8 overflow-y-auto overscroll-contain flex-1 space-y-6">
+                {errorMsg && (
+                  <div className="bg-red-50 text-red-600 p-3.5 rounded-xl text-xs font-medium border border-red-200">
+                    {errorMsg}
+                  </div>
+                )}
 
-              {errorMsg && (
-                <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium border border-red-200">
-                  {errorMsg}
-                </div>
-              )}
+                {successMsg && (
+                  <div className="bg-green-50 text-green-600 p-3.5 rounded-xl text-xs font-medium border border-green-200 flex items-center justify-between">
+                    <span>{successMsg}</span>
+                    <button type="button" onClick={() => setSuccessMsg('')} className="text-green-500 hover:text-green-700">
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium mb-2 text-slate-700">Dish Name</label>
@@ -443,7 +1015,7 @@ const MenuManager = ({ user }) => {
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium mb-2 text-slate-700">Description</label>
                     <textarea
-                      name="description" required rows="3" value={formData.description} onChange={handleInputChange}
+                      name="description" required rows="2" value={formData.description} onChange={handleInputChange}
                       className="w-full py-3 px-4 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-orange-500 transition-colors resize-none"
                       placeholder="Briefly describe the dish..."
                     ></textarea>
@@ -488,6 +1060,202 @@ const MenuManager = ({ user }) => {
                   </div>
                 </div>
 
+                {/* Stock Availability */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div>
+                    <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      Stock Availability
+                    </span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      When off, dish still shows in video reels but shows Out of Stock at checkout.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, is_in_stock: !prev.is_in_stock }))}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border font-bold text-xs transition-all shadow-sm shrink-0 ml-4 ${
+                      formData.is_in_stock
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                    }`}
+                  >
+                    {formData.is_in_stock ? (
+                      <>
+                        <ToggleRight size={20} className="text-emerald-600" />
+                        <span>In Stock</span>
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft size={20} className="text-rose-600" />
+                        <span>Out of Stock</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Quantities / Varieties */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-slate-700">Quantities / Varieties <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <button
+                      type="button"
+                      onClick={addQuantityRow}
+                      className="flex items-center gap-1 text-xs font-semibold text-orange-500 hover:text-orange-600 border border-orange-200 hover:border-orange-400 px-2.5 py-1 rounded-lg transition-colors"
+                    >
+                      <Plus size={13} /> Add
+                    </button>
+                  </div>
+                  {quantities.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-2">e.g. Half / Full, Small / Medium / Large</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {quantities.map((q, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Name (e.g. Full)"
+                            value={q.name}
+                            onChange={e => updateQuantityRow(i, 'name', e.target.value)}
+                            className="flex-1 py-2 px-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-orange-500 transition-colors text-sm"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Price (₹)"
+                            min="0"
+                            value={q.price}
+                            onChange={e => updateQuantityRow(i, 'price', e.target.value)}
+                            className="w-28 py-2 px-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-orange-500 transition-colors text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeQuantityRow(i)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Linked Accompaniments / Add-ons */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                        <Layers size={16} className="text-orange-500" />
+                        Linked Accompaniments
+                      </label>
+                      {selectedAddonIds.length > 0 && (
+                        <span className="bg-orange-100 text-orange-600 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                          {selectedAddonIds.length} selected
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetModal();
+                        navigate('/partner/dashboard/addons');
+                      }}
+                      className="flex items-center gap-1 text-xs font-semibold text-orange-500 hover:text-orange-600 bg-white border border-orange-200 hover:border-orange-400 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
+                      title="Navigate to Accompaniments page to create or manage add-ons"
+                    >
+                      <Plus size={13} />
+                      <span>Manage in Add-ons</span>
+                      <ExternalLink size={11} className="text-orange-400 ml-0.5" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Select accompaniments (e.g. Butter Roti, Naan, Rice, Raita) to offer when customers add this dish to cart.
+                  </p>
+
+                  {/* Addon Selector List */}
+                  {partnerAddons.length === 0 ? (
+                    <div className="text-center py-6 px-4 bg-white/70 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center">
+                      <p className="text-xs text-slate-500 mb-3 font-medium">No accompaniments created yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetModal();
+                          navigate('/partner/dashboard/addons');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-orange-500/20"
+                      >
+                        <Plus size={14} /> Create your first accompaniment
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {partnerAddons.length > 4 && (
+                        <div className="relative mb-2">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
+                          <input
+                            type="text"
+                            placeholder="Filter add-ons..."
+                            value={addonSearchTerm}
+                            onChange={e => setAddonSearchTerm(e.target.value)}
+                            className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-orange-500"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                        {partnerAddons
+                          .filter(a => a.name.toLowerCase().includes(addonSearchTerm.toLowerCase()))
+                          .map((addon) => {
+                            const isSelected = selectedAddonIds.includes(addon.id);
+                            return (
+                              <div
+                                key={addon.id}
+                                onClick={() => toggleAddonSelection(addon.id)}
+                                className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all select-none ${
+                                  isSelected 
+                                    ? 'bg-orange-50/60 border-orange-500 shadow-sm text-slate-900' 
+                                    : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                  {/* Addon thumbnail */}
+                                  <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                                    {addon.image_url ? (
+                                      <img src={addon.image_url} alt={addon.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <ImageIcon size={14} className="text-slate-300" />
+                                    )}
+                                  </div>
+
+                                  <div className="overflow-hidden">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center border shrink-0 ${
+                                        addon.is_veg ? 'border-green-500' : 'border-red-500'
+                                      }`}>
+                                        <div className={`w-1 h-1 rounded-full ${addon.is_veg ? 'bg-green-500' : 'bg-red-500'}`} />
+                                      </div>
+                                      <span className="text-xs font-bold truncate">{addon.name}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <span className="text-xs font-black text-slate-900">+₹{addon.price}</span>
+                                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${
+                                    isSelected 
+                                      ? 'bg-orange-500 border-orange-500 text-white' 
+                                      : 'border-slate-300 bg-white'
+                                  }`}>
+                                    {isSelected && <Check size={11} strokeWidth={3} />}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Photo + Reel */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -496,121 +1264,163 @@ const MenuManager = ({ user }) => {
                       {editItem && <span className="text-slate-400 font-normal"> (replace)</span>}
                     </label>
                     <input type="file" id="dishImage" accept="image/*" onChange={handleImageChange} className="hidden" />
-                    <label
-                      htmlFor="dishImage"
-                      className={`flex flex-col items-center justify-center w-full p-5 border-2 border-dashed rounded-xl transition-colors cursor-pointer h-32
-                        ${imageFile ? 'border-orange-400 bg-orange-50' : editItem?.image_url ? 'border-green-300 bg-green-50' : 'border-slate-300 hover:bg-orange-50 hover:border-orange-400'}`}
-                    >
-                      {imageFile ? (
-                        <div className="text-center">
-                          <ImageIcon className="mx-auto text-orange-500 mb-1" size={24} />
-                          <span className="text-orange-700 font-medium text-xs line-clamp-1 px-2">{imageFile.name}</span>
-                          <p className="text-orange-400 text-xs mt-0.5">Tap to change</p>
+                    {imageFile ? (
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="relative w-14 h-14 overflow-hidden border-2 border-orange-300 bg-black flex-shrink-0 cursor-pointer"
+                          style={{borderRadius: '10px'}}
+                          onClick={() => setPreviewImageUrl(URL.createObjectURL(imageFile))}
+                        >
+                          <img src={URL.createObjectURL(imageFile)} alt="preview" className="absolute inset-0 w-full h-full object-cover" />
                         </div>
-                      ) : editItem?.image_url ? (
-                        <div className="text-center">
-                          <ImageIcon className="mx-auto text-green-500 mb-1" size={24} />
-                          <span className="text-green-700 font-medium text-xs">Photo exists</span>
-                          <p className="text-green-400 text-xs mt-0.5">Tap to replace</p>
+                        <div>
+                          <p className="text-xs font-medium text-slate-700 line-clamp-1">{imageFile.name}</p>
+                          <label htmlFor="dishImage" className="text-xs text-orange-500 cursor-pointer hover:underline">Tap to change</label>
                         </div>
-                      ) : (
-                        <div className="text-center text-slate-500">
-                          <Upload className="mx-auto mb-1" size={22} />
-                          <span className="text-sm font-semibold">Upload Photo</span>
-                          <p className="text-xs text-slate-400 mt-0.5">JPG / PNG, Max 5MB</p>
+                      </div>
+                    ) : editItem?.image_url ? (
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="relative w-14 h-14 overflow-hidden border-2 border-green-300 flex-shrink-0 cursor-pointer"
+                          style={{borderRadius: '10px'}}
+                          onClick={() => setPreviewImageUrl(editItem.image_url)}
+                        >
+                          <img src={editItem.image_url} alt="existing" className="absolute inset-0 w-full h-full object-cover" />
                         </div>
-                      )}
-                    </label>
+                        <div>
+                          <p className="text-xs font-medium text-green-700">Photo exists</p>
+                          <label htmlFor="dishImage" className="text-xs text-green-500 cursor-pointer hover:underline">Tap to replace</label>
+                        </div>
+                      </div>
+                    ) : (
+                      <label htmlFor="dishImage" className="flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer h-24 hover:bg-orange-50 hover:border-orange-400 transition-colors">
+                        <ImageIcon className="text-slate-400 mb-1" size={22} />
+                        <span className="text-sm font-semibold text-slate-500">Upload Photo</span>
+                        <p className="text-xs text-slate-400 mt-0.5">JPG / PNG, Max 5MB</p>
+                      </label>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700">
-                      Dish Reel {!editItem && <span className="text-red-400">*</span>}
-                      {editItem && <span className="text-slate-400 font-normal"> (replace)</span>}
-                    </label>
-                    <input type="file" id="dishVideo" accept="video/mp4,video/quicktime" onChange={handleVideoChange} className="hidden" />
-                    <label
-                      htmlFor="dishVideo"
-                      className={`flex flex-col items-center justify-center w-full p-5 border-2 border-dashed rounded-xl transition-colors cursor-pointer h-32
-                        ${videoFile ? 'border-blue-400 bg-blue-50' : editItem ? 'border-green-300 bg-green-50' : 'border-slate-300 hover:bg-blue-50 hover:border-blue-400'}`}
-                    >
-                      {videoFile ? (
-                        <div className="text-center">
-                          <Video className="mx-auto text-blue-500 mb-1" size={24} />
-                          <span className="text-blue-700 font-medium text-xs line-clamp-1 px-2">{videoFile.name}</span>
-                          <p className="text-blue-400 text-xs mt-0.5">Tap to change</p>
-                        </div>
-                      ) : editItem ? (
-                        <div className="text-center">
-                          <Video className="mx-auto text-green-500 mb-1" size={24} />
-                          <span className="text-green-700 font-medium text-xs">Reel exists</span>
-                          <p className="text-green-400 text-xs mt-0.5">Tap to replace</p>
-                        </div>
-                      ) : (
-                        <div className="text-center text-slate-500">
-                          <Video className="mx-auto mb-1" size={22} />
-                          <span className="text-sm font-semibold">Upload Reel</span>
-                          <p className="text-xs text-slate-400 mt-0.5">MP4 / MOV, Max 50MB</p>
-                        </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Dish Reel {!editItem && <span className="text-red-400">*</span>}
+                        {editItem && <span className="text-slate-400 font-normal"> (add more)</span>}
+                      </label>
+                      {(existingReels.length > 0 || videoFiles.length > 0) && (
+                        <label htmlFor="dishVideo" className="cursor-pointer p-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
+                          <Plus size={14} className="text-blue-500" />
+                        </label>
                       )}
-                    </label>
+                    </div>
+
+                    <input type="file" id="dishVideo" accept="video/mp4,video/quicktime" multiple onChange={handleVideoChange} className="hidden" />
+
+                    {(existingReels.length > 0 || videoFiles.length > 0) ? (
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {/* Saved reels */}
+                        {existingReels.map((reel) => (
+                          <div key={reel.id} className="relative w-14 h-14 overflow-hidden border-2 border-green-400 bg-black flex-shrink-0 cursor-pointer" style={{borderRadius: '10px'}} onClick={() => setPreviewVideoUrl(reel.video_url)}>
+                            <AdaptiveVideo src={reel.video_url} className="absolute inset-0 w-full h-full object-cover opacity-80" muted playsInline />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletedReelIds(prev => [...prev, reel.id]);
+                                setExistingReels(prev => prev.filter(r => r.id !== reel.id));
+                              }}
+                              className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors z-10"
+                            >
+                              <X size={10} />
+                            </button>
+                            <span className="absolute bottom-0.5 left-0.5 text-[9px] bg-green-500 text-white font-bold px-1 rounded">saved</span>
+                          </div>
+                        ))}
+                        {/* New reels */}
+                        {videoFiles.map((file, idx) => (
+                          <div key={idx} className="relative w-14 h-14 overflow-hidden border-2 border-blue-300 bg-black flex-shrink-0 cursor-pointer" style={{borderRadius: '10px'}} onClick={() => setPreviewVideoUrl(URL.createObjectURL(file))}>
+                            <video src={URL.createObjectURL(file)} className="absolute inset-0 w-full h-full object-cover opacity-80" muted playsInline />
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); removeVideoFile(idx); }}
+                              className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors z-10"
+                            >
+                              <X size={10} />
+                            </button>
+                            <span className="absolute bottom-0.5 left-0.5 text-[9px] bg-blue-500 text-white font-bold px-1 rounded">new</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <label htmlFor="dishVideo" className="flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer h-24 hover:bg-blue-50 hover:border-blue-400 transition-colors">
+                        <Video className="text-slate-400 mb-1" size={22} />
+                        <span className="text-sm font-semibold text-slate-500">Upload Reel</span>
+                        <p className="text-xs text-slate-400 mt-0.5">MP4 / MOV, Max 50MB each</p>
+                      </label>
+                    )}
                   </div>
                 </div>
+              </div>
 
-                <div className="pt-4 flex gap-4">
-                  <button type="button" onClick={resetModal} className="flex-1 py-3 px-4 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
-                    Cancel
-                  </button>
-                  <button
-                    type="submit" disabled={isSubmitting}
-                    className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Saving...</>
-                    ) : editItem ? 'Save Changes' : 'Add Dish'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              {/* Modal Fixed Footer */}
+              <div className="p-4 sm:px-8 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center gap-3">
+                <button 
+                  type="button" 
+                  onClick={resetModal} 
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit" 
+                  name="save" 
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-70 flex items-center justify-center gap-2 whitespace-nowrap text-sm shadow-lg shadow-orange-500/20"
+                >
+                  {isSubmitting ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>{uploadStage === 'uploading' ? `Uploading video ${uploadProgress}%` : uploadStage === 'processing' ? `Preparing video ${uploadProgress}%` : 'Saving...'}</>
+                  ) : editItem ? 'Save Changes' : 'Save Dish'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* Video Player Modal */}
       {activeVideoItem && (
-        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4">
-          <button 
-            onClick={() => setActiveVideoItem(null)} 
-            className="absolute top-6 right-6 text-white/50 hover:text-white p-2 z-10 transition-colors bg-white/10 rounded-full hover:bg-white/20"
-          >
-            <X size={28} />
+        <ReelPlayer item={activeVideoItem} onClose={() => setActiveVideoItem(null)} />
+      )}
+      {/* Image Preview Overlay */}
+      {previewImageUrl && (
+        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4" onClick={() => setPreviewImageUrl(null)}>
+          <button className="absolute top-6 right-6 text-white/60 hover:text-white bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors">
+            <X size={24} />
           </button>
-          
-          <div className="w-full max-w-[400px] aspect-[9/16] bg-black rounded-[2rem] overflow-hidden relative shadow-2xl ring-1 ring-white/20">
-            {activeVideoItem.reels && activeVideoItem.reels.length > 0 && activeVideoItem.reels[0].video_url ? (
-              <video
-                src={activeVideoItem.reels[0].video_url}
-                className="w-full h-full object-cover"
-                controls
-                autoPlay
-                playsInline
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-8 text-center">
-                <Video size={48} className="mb-4 opacity-30" />
-                <p className="text-lg font-bold text-slate-300">No Reel Available</p>
-                <p className="text-sm mt-2">This dish doesn't have a promotional video reel yet. Edit the dish to upload one.</p>
-              </div>
-            )}
-            
-            {/* Dish Info Overlay in Player */}
-            <div className="absolute top-0 left-0 right-0 p-6 bg-gradient-to-b from-black/80 to-transparent pointer-events-none flex justify-between items-start">
-               <div>
-                  <h3 className="text-white font-bold text-xl drop-shadow-md">{activeVideoItem.name}</h3>
-                  <p className="text-orange-400 font-bold">₹{activeVideoItem.price}</p>
-               </div>
-            </div>
-          </div>
+          <img
+            src={previewImageUrl}
+            alt="preview"
+            className="max-h-[80vh] max-w-full rounded-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* Upload Preview Overlay */}
+      {previewVideoUrl && (
+        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4" onClick={() => setPreviewVideoUrl(null)}>
+          <button className="absolute top-6 right-6 text-white/60 hover:text-white bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors">
+            <X size={24} />
+          </button>
+          <AdaptiveVideo
+            src={previewVideoUrl}
+            className="max-h-[80vh] max-w-full rounded-2xl"
+            controls
+            autoPlay
+            playsInline
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

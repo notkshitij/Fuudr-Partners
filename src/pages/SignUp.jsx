@@ -1,29 +1,24 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { 
   Store, 
   User, 
   Phone, 
   Mail, 
-  MapPin, 
   UtensilsCrossed, 
   Lock,
   ArrowRight,
   ChevronDown,
   Eye,
   EyeOff,
-  MapPinned
+  AlertCircle,
+  X
 } from 'lucide-react';
-import AuthLayout from '../components/AuthLayout';
-import { supabase } from '../supabaseClient';
 
-// Utility function to hash password securely
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+import AuthLayout from '../components/AuthLayout';
+import AddressAutocomplete from '../components/AddressAutocomplete';
+import { supabase } from '../supabaseClient';
 
 const restaurantTypes = [
   { value: 'bakery', label: 'Bakery' },
@@ -46,16 +41,34 @@ const SignUp = () => {
     mobileNumber: '',
     email: '',
     address: '',
+    latitude: null,
+    longitude: null,
+    googleMapLink: '',
+    avgRating: 0.0,
+    totalReviews: 0,
     restaurantType: 'restaurant',
     providesDelivery: 'yes',
+    isPoornima: false,
     password: ''
   });
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleAddressSelect = ({ address, latitude, longitude, googleMapLink, rating, userRatingCount }) => {
+    setFormData(prev => ({
+      ...prev,
+      address,
+      latitude,
+      longitude,
+      googleMapLink,
+      avgRating: rating,
+      totalReviews: userRatingCount,
     }));
   };
 
@@ -69,70 +82,186 @@ const SignUp = () => {
       if (formData.mobileNumber.length < 10) {
         throw new Error("Please enter a valid mobile number.");
       }
-
-      // Hash the password before saving
-      const hashedPassword = await hashPassword(formData.password);
-
-      const { data, error } = await supabase
-        .from('partners')
-        .insert([
-          {
-            restaurant_name: formData.restaurantName,
-            owner_name: formData.ownerName,
-            mobile_number: formData.mobileNumber,
-            email: formData.email,
-            address: formData.address,
-            restaurant_type: formData.restaurantType,
-            provides_delivery: formData.providesDelivery === 'yes',
-            password: hashedPassword // Storing the hash
-          }
-        ])
-        .select()
-        .single();
-
-      if (error || !data) {
-        throw error || new Error('Failed to create account.');
+      if (!formData.latitude || !formData.longitude) {
+        throw new Error("Please select your restaurant address from the suggestions list.");
       }
 
-      // Save user session
-      localStorage.setItem('partnerUser', JSON.stringify(data));
+      const cleanEmail = formData.email.trim().toLowerCase();
+
+      // 1. Create Supabase Auth user (bcrypt hashed server-side, JWT managed by Supabase)
+      try {
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password: formData.password,
+          options: {
+            data: {
+              role: 'partner',
+              restaurant_name: formData.restaurantName,
+              owner_name: formData.ownerName,
+              mobile_number: formData.mobileNumber
+            }
+          }
+        });
+      } catch (authErr) {
+        console.warn("Supabase auth signUp note:", authErr);
+      }
+
+      // 2. Save Partner record in database table (via RPC or direct insert)
+      let partnerData = null;
+      {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('register_partner', {
+            p_restaurant_name: formData.restaurantName,
+            p_owner_name: formData.ownerName,
+            p_mobile_number: formData.mobileNumber,
+            p_email: cleanEmail,
+            p_password: formData.password,
+            p_address: formData.address,
+            p_latitude: formData.latitude,
+            p_longitude: formData.longitude,
+            p_google_map_link: formData.googleMapLink || null,
+            p_avg_rating: formData.avgRating,
+            p_total_reviews: formData.totalReviews,
+            p_restaurant_type: formData.restaurantType,
+            p_provides_delivery: formData.providesDelivery === 'yes',
+            p_is_poornima: Boolean(formData.isPoornima)
+          });
+
+        if (rpcError) throw rpcError;
+        partnerData = rpcData;
+      }
+
+      if (!partnerData) {
+        throw new Error('Could not create your account. Please try again.');
+      }
+
+      // 3. is_poornima is now saved by register_partner itself
+      if (formData.isPoornima && partnerData?.id) {
+        partnerData.is_poornima = true;
+      }
+
+      // 4. Save user session in localStorage (matching existing structure)
+      localStorage.setItem('partnerUser', JSON.stringify(partnerData));
 
       // Success, redirect to Onboarding
-      navigate('/setup-profile');
+      navigate('/partner/setup-profile');
       
     } catch (err) {
-      console.error("Error signing up:", err.message);
-      setErrorMsg(err.message || "Something went wrong. Please try again.");
+      console.error("Error signing up:", err);
+
+      // Translate raw DB/network errors into friendly, user-facing messages
+      let friendlyMessage = "Something went wrong. Please try again.";
+
+      if (err?.code === '23505' || err?.message?.includes('already exists') || err?.message?.includes('User already registered')) {
+        if (err.message?.includes('mobile_number')) {
+          friendlyMessage = "This mobile number is already registered. Please sign in instead, or use a different number.";
+        } else if (err.message?.includes('email') || err.message?.includes('User already registered')) {
+          friendlyMessage = "This email is already registered. Please sign in instead, or use a different email.";
+        } else {
+          friendlyMessage = "An account with these details already exists. Please sign in instead.";
+        }
+      } else if (err?.message) {
+        friendlyMessage = err.message;
+      }
+
+      setErrorMsg(friendlyMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthLayout 
-      title="Partner With Us" 
-      subtitle="Join Fuudr and grow your business today"
-    >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        
-        {errorMsg && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200">
-            {errorMsg}
+    <>
+      <Helmet>
+        <title>Register Restaurant Partner | Fuudr Program</title>
+        <meta name="description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
+        <link rel="canonical" href="https://fuudr.com/partner/signup" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://fuudr.com/partner/signup" />
+        <meta property="og:title" content="Register Restaurant Partner | Fuudr Program" />
+        <meta property="og:description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
+        <meta property="og:image" content="https://fuudr.com/banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content="https://fuudr.com/partner/signup" />
+        <meta name="twitter:title" content="Register Restaurant Partner | Fuudr Program" />
+        <meta name="twitter:description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
+        <meta name="twitter:image" content="https://fuudr.com/banner.png" />
+        <meta name="twitter:site" content="@tryfuudr" />
+        <script type="application/ld+json">{`
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [{
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://fuudr.com/"
+            },{
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Partner Portal",
+              "item": "https://fuudr.com/partner"
+            },{
+              "@type": "ListItem",
+              "position": 3,
+              "name": "Register",
+              "item": "https://fuudr.com/partner/signup"
+            }]
+          }
+        `}</script>
+      </Helmet>
+      {/* Error Popup Modal */}
+      {errorMsg && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 relative animate-[fadeIn_0.2s_ease-out]">
+            <button
+              onClick={() => setErrorMsg('')}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+              aria-label="Close"
+            >
+              <X size={20} />
+            </button>
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                <AlertCircle className="text-red-500" size={28} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Couldn't Register</h3>
+              <p className="text-sm text-slate-500">{errorMsg}</p>
+              <button
+                onClick={() => setErrorMsg('')}
+                className="mt-3 w-full py-2.5 px-6 rounded-lg font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors"
+              >
+                Okay
+              </button>
+            </div>
           </div>
-        )}
+          <style>{`
+            @keyframes fadeIn {
+              from { opacity: 0; transform: scale(0.96); }
+              to { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      <AuthLayout 
+        title="Partner With Us" 
+        subtitle="Join Fuudr and grow your business today"
+      >
+        <form onSubmit={handleSubmit} className="space-y-2.5 sm:space-y-3">
 
         {/* Row 1: Restaurant & Owner Name */}
-        <div className="flex flex-col md:flex-row gap-5">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Restaurant Name</label>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Restaurant Name</label>
             <div className="relative flex items-center">
-              <Store className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
+              <Store className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
               <input 
                 type="text" 
                 name="restaurantName"
                 value={formData.restaurantName}
                 onChange={handleChange}
-                className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
+                className="w-full py-2 sm:py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10" 
                 placeholder="e.g. The Grand Kitchen" 
                 required
               />
@@ -140,15 +269,15 @@ const SignUp = () => {
           </div>
           
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Owner / Manager Name</label>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Owner / Manager Name</label>
             <div className="relative flex items-center">
-              <User className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
+              <User className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
               <input 
                 type="text" 
                 name="ownerName"
                 value={formData.ownerName}
                 onChange={handleChange}
-                className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
+                className="w-full py-2 sm:py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10" 
                 placeholder="Full Name" 
                 required
               />
@@ -156,18 +285,18 @@ const SignUp = () => {
           </div>
         </div>
 
-        {/* Row 2: Mobile & Verification */}
-        <div className="flex flex-col md:flex-row gap-5">
+        {/* Row 2: Mobile & Email */}
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Mobile Number</label>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Mobile Number</label>
             <div className="relative flex items-center">
-              <Phone className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
+              <Phone className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
               <input 
                 type="tel" 
                 name="mobileNumber"
                 value={formData.mobileNumber}
                 onChange={handleChange}
-                className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
+                className="w-full py-2 sm:py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10" 
                 placeholder="+91 XXXXX XXXXX" 
                 required
               />
@@ -175,15 +304,15 @@ const SignUp = () => {
           </div>
           
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Email Address</label>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Email Address</label>
             <div className="relative flex items-center">
-              <Mail className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
+              <Mail className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
               <input 
                 type="email" 
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
+                className="w-full py-2 sm:py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10" 
                 placeholder="restaurant@example.com" 
                 required
               />
@@ -193,60 +322,40 @@ const SignUp = () => {
 
         {/* Address */}
         <div>
-          <label className="block text-sm font-medium mb-2 text-slate-900">Restaurant Address</label>
-          <div className="relative flex items-center">
-            <MapPin className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
-            <input 
-              type="text" 
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              className="w-full py-3 pl-11 pr-12 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
-              placeholder="e.g. 123 Main Street, Sector 4..." 
-              required
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (formData.address.trim()) {
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address)}`, '_blank');
-                } else {
-                  alert("Please enter an address first to see it on maps.");
-                }
-              }}
-              title="View on Google Maps"
-              className="absolute right-4 text-slate-400 hover:text-orange-500 transition-colors focus:outline-none"
-            >
-              <MapPinned size={20} />
-            </button>
-          </div>
+          <label className="block text-xs font-semibold mb-1 text-slate-800">Restaurant Address</label>
+          <AddressAutocomplete
+            value={formData.address}
+            onSelect={handleAddressSelect}
+            placeholder="Search your restaurant address..."
+            required
+          />
         </div>
 
         {/* Row 3: Type & Delivery */}
-        <div className="flex flex-col md:flex-row gap-5">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Restaurant Type</label>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Restaurant Type</label>
             <div className="relative">
-              <UtensilsCrossed className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" size={20} />
+              <UtensilsCrossed className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" size={17} />
               
               {/* Custom Dropdown Trigger */}
               <button 
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10 text-left"
+                className="w-full flex items-center justify-between py-2 sm:py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10 text-left"
               >
                 <span>{restaurantTypes.find(t => t.value === formData.restaurantType)?.label}</span>
-                <ChevronDown size={20} className={`text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={17} className={`text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Custom Dropdown Menu */}
               <div 
-                className={`absolute left-0 right-0 top-full mt-2 bg-white border border-slate-100 shadow-xl rounded-lg overflow-hidden z-20 transition-all duration-300 origin-top ${isDropdownOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 pointer-events-none'}`}
+                className={`absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-100 shadow-xl rounded-lg overflow-hidden z-20 transition-all duration-300 origin-top ${isDropdownOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 pointer-events-none'}`}
               >
                 {restaurantTypes.map(type => (
                   <div 
                     key={type.value}
-                    className={`px-4 py-3 cursor-pointer hover:bg-orange-50 transition-colors ${formData.restaurantType === type.value ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-700'}`}
+                    className={`px-3.5 py-2.5 text-xs sm:text-sm cursor-pointer hover:bg-orange-50 transition-colors ${formData.restaurantType === type.value ? 'bg-orange-50 text-orange-600 font-semibold' : 'text-slate-700'}`}
                     onClick={() => {
                       setFormData(prev => ({ ...prev, restaurantType: type.value }));
                       setIsDropdownOpen(false);
@@ -260,8 +369,8 @@ const SignUp = () => {
           </div>
 
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2 text-slate-900">Provide Delivery?</label>
-            <div className="flex gap-4">
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Provide Delivery?</label>
+            <div className="flex gap-2.5">
               <div className="flex-1 relative">
                 <input 
                   type="radio" 
@@ -272,7 +381,7 @@ const SignUp = () => {
                   onChange={handleChange}
                   className="peer absolute opacity-0"
                 />
-                <label htmlFor="delivery-yes" className="flex items-center justify-center py-3 px-4 border border-slate-200 rounded-lg bg-white text-slate-500 font-medium cursor-pointer transition-all peer-checked:border-orange-500 peer-checked:bg-orange-500/5 peer-checked:text-orange-500 peer-focus-visible:ring-4 peer-focus-visible:ring-orange-500/20">
+                <label htmlFor="delivery-yes" className="flex items-center justify-center py-2 sm:py-2.5 px-3 border border-slate-200 rounded-lg bg-white text-slate-500 text-xs sm:text-sm font-medium cursor-pointer transition-all peer-checked:border-orange-500 peer-checked:bg-orange-500/5 peer-checked:text-orange-500 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500/20">
                   Yes
                 </label>
               </div>
@@ -286,7 +395,7 @@ const SignUp = () => {
                   onChange={handleChange}
                   className="peer absolute opacity-0"
                 />
-                <label htmlFor="delivery-no" className="flex items-center justify-center py-3 px-4 border border-slate-200 rounded-lg bg-white text-slate-500 font-medium cursor-pointer transition-all peer-checked:border-orange-500 peer-checked:bg-orange-500/5 peer-checked:text-orange-500 peer-focus-visible:ring-4 peer-focus-visible:ring-orange-500/20">
+                <label htmlFor="delivery-no" className="flex items-center justify-center py-2 sm:py-2.5 px-3 border border-slate-200 rounded-lg bg-white text-slate-500 text-xs sm:text-sm font-medium cursor-pointer transition-all peer-checked:border-orange-500 peer-checked:bg-orange-500/5 peer-checked:text-orange-500 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500/20">
                   No
                 </label>
               </div>
@@ -294,26 +403,44 @@ const SignUp = () => {
           </div>
         </div>
 
+        {/* Inside Poornima Campus Checkbox */}
+        <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer select-none ${
+          formData.isPoornima 
+            ? 'border-orange-400 bg-orange-50/50' 
+            : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50'
+        }`}>
+          <input 
+            type="checkbox" 
+            name="isPoornima"
+            checked={formData.isPoornima}
+            onChange={handleChange}
+            className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500 shrink-0"
+          />
+          <span className="text-xs font-medium text-slate-700">
+            Is this cafe located inside <strong className="font-semibold text-orange-600">Poornima campus</strong>?
+          </span>
+        </label>
+
         {/* Password */}
         <div>
-          <label className="block text-sm font-medium mb-2 text-slate-900">Create Password</label>
+          <label className="block text-xs font-semibold mb-1 text-slate-800">Create Password</label>
           <div className="relative flex items-center">
-            <Lock className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
+            <Lock className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
             <input 
               type={showPassword ? "text" : "password"}
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className="w-full py-3 pl-11 pr-12 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
+              className="w-full py-2 sm:py-2.5 pl-9 pr-10 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-xs sm:text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10" 
               placeholder="Create a strong password" 
               required
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 text-slate-400 hover:text-orange-500 transition-colors focus:outline-none"
+              className="absolute right-3 text-slate-400 hover:text-orange-500 transition-colors focus:outline-none"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
         </div>
@@ -321,18 +448,19 @@ const SignUp = () => {
         <button 
           type="submit" 
           disabled={loading}
-          className="w-full inline-flex items-center justify-center gap-2 py-3 px-6 rounded-lg font-semibold text-white bg-orange-500 hover:bg-orange-600 active:translate-y-0 hover:-translate-y-px transition-all shadow-[0_4px_6px_-1px_rgba(249,115,22,0.2)] hover:shadow-[0_6px_8px_-1px_rgba(249,115,22,0.3)] mt-4 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-lg font-bold text-white bg-orange-500 hover:bg-orange-600 active:translate-y-0 hover:-translate-y-px transition-all shadow-[0_4px_6px_-1px_rgba(249,115,22,0.2)] hover:shadow-[0_6px_8px_-1px_rgba(249,115,22,0.3)] mt-1.5 text-xs sm:text-sm disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {loading ? 'Registering...' : 'Register Restaurant'}
-          {!loading && <ArrowRight size={20} />}
+          {!loading && <ArrowRight size={17} />}
         </button>
 
-        <div className="mt-8 text-center text-sm text-slate-500">
+        <div className="mt-3 text-center text-xs text-slate-500">
           Already have an account?{' '}
-          <Link to="/" className="text-orange-500 font-medium hover:text-orange-600 transition-colors">Sign In here</Link>
+          <Link to="/partner" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">Sign In here</Link>
         </div>
       </form>
-    </AuthLayout>
+      </AuthLayout>
+    </>
   );
 };
 

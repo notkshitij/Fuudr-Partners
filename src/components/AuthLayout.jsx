@@ -1,11 +1,4 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ChefHat, ArrowRight } from 'lucide-react';
-
 const AuthLayout = ({ children, title, subtitle }) => {
-  const location = useLocation();
-  const isSignIn = location.pathname === '/signin';
-
   return (
     <div className="h-screen w-full bg-[#FAFAFA] font-outfit text-slate-800 flex overflow-hidden">
       

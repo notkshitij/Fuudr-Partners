@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   UtensilsCrossed, 
+  Layers,
   LogOut,
   Menu as MenuIcon,
   X,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import Overview from './Overview';
 import MenuManager from './MenuManager';
+import AddonsManager from './AddonsManager';
 import Settings from './Settings';
 
 const DashboardLayout = () => {
@@ -21,7 +23,7 @@ const DashboardLayout = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('partnerUser');
     if (!storedUser) {
-      navigate('/');
+      navigate('/partner');
     } else {
       setUser(JSON.parse(storedUser));
     }
@@ -29,15 +31,16 @@ const DashboardLayout = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('partnerUser');
-    navigate('/');
+    navigate('/partner');
   };
 
   if (!user) return null;
 
   const navItems = [
-    { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Menu', path: '/dashboard/menu', icon: UtensilsCrossed },
-    { name: 'Settings', path: '/dashboard/settings', icon: SettingsIcon },
+    { name: 'Overview', path: '/partner/dashboard', icon: LayoutDashboard },
+    { name: 'Menu', path: '/partner/dashboard/menu', icon: UtensilsCrossed },
+    { name: 'Accompaniments', path: '/partner/dashboard/addons', icon: Layers },
+    { name: 'Settings', path: '/partner/dashboard/settings', icon: SettingsIcon },
   ];
 
   return (
@@ -56,10 +59,12 @@ const DashboardLayout = () => {
         fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:flex lg:flex-col lg:rounded-r-3xl shadow-[4px_0_24px_rgba(0,0,0,0.02)]
         ${isMobileMenuOpen ? 'translate-x-0 rounded-r-3xl' : '-translate-x-full'}
       `}>
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-100">
-          <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-yellow-500 tracking-tight">
-            Fuudr Partner
-          </span>
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-100 bg-white rounded-tr-3xl lg:rounded-none">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
+              Fuudr <span className="text-orange-500 ml-1.5 font-bold">Partner</span>
+            </span>
+          </div>
           <button 
             className="lg:hidden text-slate-500 hover:text-slate-700"
             onClick={() => setIsMobileMenuOpen(false)}
@@ -68,74 +73,80 @@ const DashboardLayout = () => {
           </button>
         </div>
 
-        <div className="p-6 flex flex-col items-center border-b border-slate-100">
-          {user.logo_url ? (
-            <img src={user.logo_url} alt="Logo" className="w-20 h-20 rounded-2xl object-cover shadow-sm mb-3" />
-          ) : (
-            <div className="w-20 h-20 rounded-2xl bg-orange-100 flex items-center justify-center mb-3">
-              <span className="text-2xl font-bold text-orange-600">
-                {user.restaurant_name.charAt(0)}
-              </span>
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 transition-all hover:bg-slate-100 hover:shadow-sm">
+            {user.logo_url ? (
+              <img src={user.logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover shadow-sm bg-white" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-sm shadow-orange-500/20">
+                <span className="text-xl font-bold text-white">
+                  {user.restaurant_name.charAt(0)}
+                </span>
+              </div>
+            )}
+            <div className="overflow-hidden flex-1">
+              <h2 className="font-bold text-sm text-slate-900 truncate leading-tight">{user.restaurant_name}</h2>
+              <p className="text-xs text-slate-500 truncate mt-0.5">{user.owner_name}</p>
             </div>
-          )}
-          <h2 className="font-bold text-lg text-center leading-tight">{user.restaurant_name}</h2>
-          <p className="text-sm text-slate-500">{user.owner_name}</p>
+          </div>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-3">Main Menu</div>
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+            const isActive = location.pathname === item.path || (item.path !== '/partner/dashboard' && location.pathname.startsWith(item.path));
             return (
               <Link
                 key={item.name}
                 to={item.path}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all duration-300 group relative ${
                   isActive 
-                    ? 'bg-orange-50 text-orange-600' 
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20 translate-x-1' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:translate-x-1'
                 }`}
               >
-                <item.icon size={20} className={isActive ? 'text-orange-500' : 'text-slate-400'} />
+                <item.icon size={20} className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-orange-500'}`} />
                 {item.name}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
-          <button 
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-300 group"
           >
-            <LogOut size={20} className="text-red-500" />
+            <LogOut size={20} className="text-slate-400 group-hover:text-red-500 transition-colors duration-300" />
             Sign Out
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden overflow-y-auto">
         {/* Top Header for Mobile */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:hidden sticky top-0 z-30">
-          <div className="flex items-center gap-3">
+        <header className="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:hidden sticky top-0 z-30 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <button 
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg shrink-0"
             >
-              <MenuIcon size={24} />
+              <MenuIcon size={22} />
             </button>
-            <span className="font-bold text-lg">{user.restaurant_name}</span>
+            <span className="font-bold text-base truncate">{user.restaurant_name}</span>
           </div>
         </header>
 
         {/* Content Wrapper */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 lg:p-8">
-          <div className="max-w-6xl mx-auto">
+        <main className="flex-1 bg-slate-50 p-3 sm:p-4 lg:p-8 overflow-x-hidden">
+          <div className="max-w-6xl mx-auto w-full">
             <Routes>
               <Route path="/" element={<Overview user={user} />} />
               <Route path="/menu" element={<MenuManager user={user} />} />
-              <Route path="/settings" element={<Settings user={user} />} />
+              <Route path="/addons" element={<AddonsManager user={user} />} />
+              <Route path="/settings" element={<Settings user={user} onUserUpdated={setUser} />} />
             </Routes>
           </div>
         </main>

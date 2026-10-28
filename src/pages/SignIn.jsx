@@ -1,31 +1,35 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import AuthLayout from '../components/AuthLayout';
 import { supabase } from '../supabaseClient';
-
-// Utility function to hash password securely
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 const SignIn = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  
-  // Hardcoded default values for easy testing
-  const [credentials, setCredentials] = useState({
-    identifier: '',
-    password: ''
-  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({ email: '', password: '' });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('partnerUser');
+      if (stored) {
+        const user = JSON.parse(stored);
+        if (!user.opening_time) {
+          navigate('/partner/setup-profile', { replace: true });
+        } else {
+          navigate('/partner/dashboard', { replace: true });
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setCredentials(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -34,99 +38,114 @@ const SignIn = () => {
     setErrorMsg('');
 
     try {
-      // Hash the password to match against the DB
-      const hashedPassword = await hashPassword(credentials.password);
+      const cleanEmail = formData.email.trim().toLowerCase();
 
-      // Query the partners table where email matches the input
       const { data, error } = await supabase
         .from('partners')
         .select('*')
-        .eq('email', credentials.identifier)
-        .eq('password', hashedPassword)
-        .single(); // we expect exactly one match
+        .eq('email', cleanEmail)
+        .single();
 
       if (error || !data) {
-        throw new Error('Invalid email or password.');
+        throw new Error('No account found with this email. Please sign up first.');
       }
 
-      // Save user session
-      localStorage.setItem('partnerUser', JSON.stringify(data));
-      
-      // Check if profile setup is incomplete (e.g., missing opening_time)
-      if (!data.opening_time) {
-        navigate('/setup-profile');
-      } else {
-        navigate('/dashboard');
+      // Simple password check via RPC (or direct comparison if stored as plain text in prototype)
+      // Try Supabase Auth sign in first
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: formData.password,
+      });
+
+      if (authError) {
+        // Fallback: check password field directly (for prototype builds using register_partner)
+        if (data.password !== formData.password) {
+          throw new Error('Incorrect password. Please try again.');
+        }
       }
-      
+
+      localStorage.setItem('partnerUser', JSON.stringify(data));
+
+      if (!data.opening_time) {
+        navigate('/partner/setup-profile', { replace: true });
+      } else {
+        navigate('/partner/dashboard', { replace: true });
+      }
     } catch (err) {
-      console.error('Sign In Error:', err);
-      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
+      console.error('Sign in error:', err);
+      setErrorMsg(err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthLayout 
-      title="Welcome Back" 
-      subtitle="Sign in to your partner dashboard to manage your business"
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {errorMsg && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200">
-            {errorMsg}
+    <>
+      <AuthLayout title="Welcome Back" subtitle="Sign in to your partner account">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {errorMsg && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200">
+              {errorMsg}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Email Address</label>
+            <div className="relative flex items-center">
+              <Mail className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full py-2.5 pl-9 pr-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10"
+                placeholder="restaurant@example.com"
+                required
+              />
+            </div>
           </div>
-        )}
 
-        <div>
-          <label className="block text-sm font-medium mb-2 text-slate-900">Email Address</label>
-          <div className="relative flex items-center">
-            <Mail className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
-            <input 
-              type="email" 
-              name="identifier"
-              value={credentials.identifier}
-              onChange={handleChange}
-              className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
-              placeholder="Enter your email address" 
-              required
-            />
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-slate-800">Password</label>
+            <div className="relative flex items-center">
+              <Lock className="absolute left-3 text-slate-400 pointer-events-none" size={17} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full py-2.5 pl-9 pr-10 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 text-sm transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/10"
+                placeholder="Your password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 text-slate-400 hover:text-orange-500 transition-colors focus:outline-none"
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-2 text-slate-900">Password</label>
-          <div className="relative flex items-center">
-            <Lock className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
-            <input 
-              type="password" 
-              name="password"
-              value={credentials.password}
-              onChange={handleChange}
-              className="w-full py-3 pl-11 pr-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-900 transition duration-200 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10" 
-              placeholder="Enter your password" 
-              required
-            />
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-lg font-bold text-white bg-orange-500 hover:bg-orange-600 active:translate-y-0 hover:-translate-y-px transition-all shadow-[0_4px_6px_-1px_rgba(249,115,22,0.2)] hover:shadow-[0_6px_8px_-1px_rgba(249,115,22,0.3)] mt-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Signing In...' : 'Sign In'}
+            {!loading && <ArrowRight size={17} />}
+          </button>
+
+          <div className="text-center text-xs text-slate-500">
+            Don't have an account?{' '}
+            <Link to="/partner/signup" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">
+              Register here
+            </Link>
           </div>
-        </div>
-
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full inline-flex items-center justify-center gap-2 py-3 px-6 rounded-lg font-semibold text-white bg-orange-500 hover:bg-orange-600 active:translate-y-0 hover:-translate-y-px transition-all shadow-[0_4px_6px_-1px_rgba(249,115,22,0.2)] hover:shadow-[0_6px_8px_-1px_rgba(249,115,22,0.3)] mt-4 disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Signing In...' : 'Sign In'}
-          {!loading && <ArrowRight size={20} />}
-        </button>
-
-        <div className="mt-8 text-center text-sm text-slate-500">
-          Don't have a partner account?{' '}
-          <Link to="/signup" className="text-orange-500 font-medium hover:text-orange-600 transition-colors">Register now</Link>
-        </div>
-      </form>
-    </AuthLayout>
+        </form>
+      </AuthLayout>
+    </>
   );
 };
 
