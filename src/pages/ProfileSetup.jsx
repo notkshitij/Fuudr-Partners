@@ -41,7 +41,7 @@ const ProfileSetup = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('partnerUser');
     if (!storedUser) {
-      navigate('/partner');
+      navigate('/signin');
     } else {
       const parsed = JSON.parse(storedUser);
       setUser(parsed);
@@ -143,7 +143,7 @@ const ProfileSetup = () => {
       }));
 
       setTimeout(() => {
-        navigate('/partner/dashboard');
+        navigate('/dashboard');
       }, 1000);
 
     } catch (err) {

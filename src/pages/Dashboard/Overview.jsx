@@ -118,7 +118,7 @@ const Overview = ({ user }) => {
       icon: UtensilsCrossed, 
       color: 'text-orange-500', 
       bg: 'bg-orange-500/10',
-      link: '/partner/dashboard/menu'
+      link: '/dashboard/menu'
     },
     { 
       title: 'Add-ons', 
@@ -128,7 +128,7 @@ const Overview = ({ user }) => {
       icon: Layers, 
       color: 'text-blue-500', 
       bg: 'bg-blue-500/10',
-      link: '/partner/dashboard/addons'
+      link: '/dashboard/addons'
     },
     { 
       title: 'Rating', 
@@ -138,7 +138,7 @@ const Overview = ({ user }) => {
       icon: Star, 
       color: 'text-amber-500', 
       bg: 'bg-amber-500/10',
-      link: '/partner/dashboard/settings'
+      link: '/dashboard/settings'
     },
     { 
       title: 'Reviews', 
@@ -148,7 +148,7 @@ const Overview = ({ user }) => {
       icon: CheckCircle2, 
       color: 'text-purple-500', 
       bg: 'bg-purple-500/10',
-      link: '/partner/dashboard/settings'
+      link: '/dashboard/settings'
     },
   ];
 
@@ -160,7 +160,7 @@ const Overview = ({ user }) => {
       color: 'text-orange-500',
       bg: 'bg-orange-50',
       hoverBorder: 'hover:border-orange-400',
-      link: '/partner/dashboard/menu'
+      link: '/dashboard/menu'
     },
     {
       title: 'Add Dish',
@@ -169,7 +169,7 @@ const Overview = ({ user }) => {
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
       hoverBorder: 'hover:border-emerald-400',
-      link: '/partner/dashboard/menu'
+      link: '/dashboard/menu'
     },
     {
       title: 'Add-ons',
@@ -178,7 +178,7 @@ const Overview = ({ user }) => {
       color: 'text-blue-600',
       bg: 'bg-blue-50',
       hoverBorder: 'hover:border-blue-400',
-      link: '/partner/dashboard/addons'
+      link: '/dashboard/addons'
     },
     {
       title: 'Settings',
@@ -187,7 +187,7 @@ const Overview = ({ user }) => {
       color: 'text-purple-600',
       bg: 'bg-purple-50',
       hoverBorder: 'hover:border-purple-400',
-      link: '/partner/dashboard/settings'
+      link: '/dashboard/settings'
     }
   ];
 
@@ -220,7 +220,7 @@ const Overview = ({ user }) => {
 
             {/* Single compact Add Dish button — always visible */}
             <Link 
-              to="/partner/dashboard/menu" 
+              to="/dashboard/menu" 
               className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 sm:px-5 sm:py-2.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-orange-500/25 whitespace-nowrap"
             >
               <Plus size={15} /> 
@@ -294,7 +294,7 @@ const Overview = ({ user }) => {
               </p>
               <p className="text-[11px] text-amber-700 mt-0.5">Customers see these as unavailable.</p>
               <Link 
-                to="/partner/dashboard/menu" 
+                to="/dashboard/menu" 
                 className="inline-flex items-center gap-1 mt-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-[11px] font-bold rounded-lg transition-all shadow-sm"
               >
                 Review Stock <ArrowRight size={11} />
@@ -382,7 +382,7 @@ const Overview = ({ user }) => {
               <p className="text-[11px] sm:text-xs text-slate-500">Latest items on your menu</p>
             </div>
             <Link 
-              to="/partner/dashboard/menu"
+              to="/dashboard/menu"
               className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 group shrink-0"
             >
               <span>All ({stats.menuItems})</span>
@@ -398,7 +398,7 @@ const Overview = ({ user }) => {
               return (
                 <Link
                   key={dish.id}
-                  to="/partner/dashboard/menu"
+                  to="/dashboard/menu"
                   className="group relative bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 hover:border-orange-300 hover:shadow-md transition-all flex flex-col"
                 >
                   {/* Thumbnail */}

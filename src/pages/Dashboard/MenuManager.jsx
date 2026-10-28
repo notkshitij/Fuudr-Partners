@@ -1157,7 +1157,7 @@ const MenuManager = ({ user }) => {
                       type="button"
                       onClick={() => {
                         resetModal();
-                        navigate('/partner/dashboard/addons');
+                        navigate('/dashboard/addons');
                       }}
                       className="flex items-center gap-1 text-xs font-semibold text-orange-500 hover:text-orange-600 bg-white border border-orange-200 hover:border-orange-400 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
                       title="Navigate to Accompaniments page to create or manage add-ons"
@@ -1179,7 +1179,7 @@ const MenuManager = ({ user }) => {
                         type="button"
                         onClick={() => {
                           resetModal();
-                          navigate('/partner/dashboard/addons');
+                          navigate('/dashboard/addons');
                         }}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-orange-500/20"
                       >

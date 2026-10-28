@@ -144,7 +144,7 @@ const SignUp = () => {
       localStorage.setItem('partnerUser', JSON.stringify(partnerData));
 
       // Success, redirect to Onboarding
-      navigate('/partner/setup-profile');
+      navigate('/setup-profile');
       
     } catch (err) {
       console.error("Error signing up:", err);
@@ -175,14 +175,14 @@ const SignUp = () => {
       <Helmet>
         <title>Register Restaurant Partner | Fuudr Program</title>
         <meta name="description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
-        <link rel="canonical" href="https://fuudr.com/partner/signup" />
+        <link rel="canonical" href="https://fuudr.com/signup" />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://fuudr.com/partner/signup" />
+        <meta property="og:url" content="https://fuudr.com/signup" />
         <meta property="og:title" content="Register Restaurant Partner | Fuudr Program" />
         <meta property="og:description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
         <meta property="og:image" content="https://fuudr.com/banner.png" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:url" content="https://fuudr.com/partner/signup" />
+        <meta name="twitter:url" content="https://fuudr.com/signup" />
         <meta name="twitter:title" content="Register Restaurant Partner | Fuudr Program" />
         <meta name="twitter:description" content="Sign up your restaurant on Fuudr. List your dishes, upload food reels, and start receiving orders from local customers today." />
         <meta name="twitter:image" content="https://fuudr.com/banner.png" />
@@ -200,12 +200,12 @@ const SignUp = () => {
               "@type": "ListItem",
               "position": 2,
               "name": "Partner Portal",
-              "item": "https://fuudr.com/partner"
+              "item": "https://fuudr.com/"
             },{
               "@type": "ListItem",
               "position": 3,
               "name": "Register",
-              "item": "https://fuudr.com/partner/signup"
+              "item": "https://fuudr.com/signup"
             }]
           }
         `}</script>
@@ -456,7 +456,7 @@ const SignUp = () => {
 
         <div className="mt-3 text-center text-xs text-slate-500">
           Already have an account?{' '}
-          <Link to="/partner" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">Sign In here</Link>
+          <Link to="/signin" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">Sign In here</Link>
         </div>
       </form>
       </AuthLayout>

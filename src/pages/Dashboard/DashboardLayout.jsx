@@ -23,7 +23,7 @@ const DashboardLayout = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('partnerUser');
     if (!storedUser) {
-      navigate('/partner');
+      navigate('/signin');
     } else {
       setUser(JSON.parse(storedUser));
     }
@@ -31,16 +31,16 @@ const DashboardLayout = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('partnerUser');
-    navigate('/partner');
+    navigate('/signin');
   };
 
   if (!user) return null;
 
   const navItems = [
-    { name: 'Overview', path: '/partner/dashboard', icon: LayoutDashboard },
-    { name: 'Menu', path: '/partner/dashboard/menu', icon: UtensilsCrossed },
-    { name: 'Accompaniments', path: '/partner/dashboard/addons', icon: Layers },
-    { name: 'Settings', path: '/partner/dashboard/settings', icon: SettingsIcon },
+    { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Menu', path: '/dashboard/menu', icon: UtensilsCrossed },
+    { name: 'Accompaniments', path: '/dashboard/addons', icon: Layers },
+    { name: 'Settings', path: '/dashboard/settings', icon: SettingsIcon },
   ];
 
   return (
@@ -94,7 +94,7 @@ const DashboardLayout = () => {
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-3">Main Menu</div>
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path || (item.path !== '/partner/dashboard' && location.pathname.startsWith(item.path));
+            const isActive = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
             return (
               <Link
                 key={item.name}

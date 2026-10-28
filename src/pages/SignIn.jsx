@@ -17,9 +17,9 @@ const SignIn = () => {
       if (stored) {
         const user = JSON.parse(stored);
         if (!user.opening_time) {
-          navigate('/partner/setup-profile', { replace: true });
+          navigate('/setup-profile', { replace: true });
         } else {
-          navigate('/partner/dashboard', { replace: true });
+          navigate('/dashboard', { replace: true });
         }
       }
     } catch {
@@ -67,9 +67,9 @@ const SignIn = () => {
       localStorage.setItem('partnerUser', JSON.stringify(data));
 
       if (!data.opening_time) {
-        navigate('/partner/setup-profile', { replace: true });
+        navigate('/setup-profile', { replace: true });
       } else {
-        navigate('/partner/dashboard', { replace: true });
+        navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       console.error('Sign in error:', err);
@@ -139,7 +139,7 @@ const SignIn = () => {
 
           <div className="text-center text-xs text-slate-500">
             Don't have an account?{' '}
-            <Link to="/partner/signup" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">
+            <Link to="/signup" className="text-orange-500 font-semibold hover:text-orange-600 transition-colors">
               Register here
             </Link>
           </div>
